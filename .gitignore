@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+workspace/reports/
+workspace/notes/
+*.egg-info/
+dist/
+build/
+.venv/

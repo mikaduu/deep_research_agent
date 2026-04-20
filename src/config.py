@@ -1,0 +1,44 @@
+from dataclasses import dataclass
+from pathlib import Path
+import os
+
+
+@dataclass
+class Settings:
+    llm_model: str
+    llm_api_key: str
+    llm_base_url: str
+    planner_temperature: float = 0.2
+    researcher_temperature: float = 0.3
+    writer_temperature: float = 0.2
+    max_plan_items: int = 5
+    search_backend: str = "duckduckgo"
+    search_top_k: int = 6
+    memory_top_k: int = 4
+    context_max_chars: int = 7000
+    max_reflection_rounds: int = 1
+    workspace_dir: Path = Path("workspace")
+
+    @classmethod
+    def from_env(cls, project_root: Path) -> "Settings":
+        llm_api_key = os.getenv("LLM_API_KEY", "").strip()
+        llm_base_url = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1").strip()
+        llm_model = os.getenv("LLM_MODEL_ID", "gpt-4o-mini").strip()
+        workspace = project_root / os.getenv("RESEARCH_WORKSPACE_DIR", "workspace")
+
+        return cls(
+            llm_model=llm_model,
+            llm_api_key=llm_api_key,
+            llm_base_url=llm_base_url,
+            planner_temperature=float(os.getenv("PLANNER_TEMPERATURE", "0.2")),
+            researcher_temperature=float(os.getenv("RESEARCHER_TEMPERATURE", "0.3")),
+            writer_temperature=float(os.getenv("WRITER_TEMPERATURE", "0.2")),
+            max_plan_items=int(os.getenv("MAX_PLAN_ITEMS", "5")),
+            search_backend=os.getenv("SEARCH_BACKEND", "duckduckgo"),
+            search_top_k=int(os.getenv("SEARCH_TOP_K", "6")),
+            memory_top_k=int(os.getenv("MEMORY_TOP_K", "4")),
+            context_max_chars=int(os.getenv("CONTEXT_MAX_CHARS", "7000")),
+            max_reflection_rounds=int(os.getenv("MAX_REFLECTION_ROUNDS", "1")),
+            workspace_dir=workspace,
+        )
+

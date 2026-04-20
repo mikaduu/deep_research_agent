@@ -1,0 +1,16 @@
+name: deepresearch
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+    - openai>=1.30
+    - arxiv>=2.1
+    - requests>=2.31
+    - python-dotenv>=1.0
+    - duckduckgo-search>=6.0
+    - mcp>=1.0
+    - rich>=13.0
+    - typer>=0.12
