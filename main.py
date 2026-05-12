@@ -9,7 +9,7 @@ from rich.table import Table
 
 load_dotenv()
 
-from src.config import Settings
+from src.core.config import Settings
 from src.orchestrator import ResearchOrchestrator
 
 app = typer.Typer()
@@ -68,7 +68,7 @@ def search(query: str = typer.Argument(..., help="搜索关键词")):
 def analyze(url: str = typer.Argument(..., help="论文arXiv ID或URL"),
             focus: str = typer.Option(None, "--focus", "-f", help="关注点")):
     """深度分析一篇论文"""
-    from src.models import PaperItem
+    from src.core.models import PaperItem
     orch = get_orchestrator()
 
     paper_id = url.split("/")[-1]
@@ -80,6 +80,12 @@ def analyze(url: str = typer.Argument(..., help="论文arXiv ID或URL"),
         result = orch.analyze_paper(papers[0], focus)
 
     console.print(Panel(f"[bold]{papers[0].title}[/bold]"))
+    source = result.get("_source", "unknown")
+    if source == "fulltext":
+        console.print(f"[dim]分析来源: 全文 PDF ({result.get('_num_pages', '?')} 页, "
+                      f"{result.get('_num_chunks', '?')} 个章节块)[/dim]")
+    else:
+        console.print("[yellow]分析来源: 仅摘要（全文下载失败，已降级）[/yellow]")
     console.print(f"\n[bold]核心问题:[/bold] {result.get('problem', '')}")
     console.print(f"\n[bold]主要贡献:[/bold]")
     for c in result.get("contributions", []):
@@ -87,6 +93,10 @@ def analyze(url: str = typer.Argument(..., help="论文arXiv ID或URL"),
     console.print(f"\n[bold]方法:[/bold]")
     for m in result.get("methods", []):
         console.print(f"  • {m}")
+    if result.get("datasets"):
+        console.print(f"\n[bold]数据集:[/bold] {', '.join(result['datasets'])}")
+    if result.get("results"):
+        console.print(f"\n[bold]实验结果:[/bold] {result['results']}")
     console.print(f"\n[bold]局限性:[/bold]")
     for l in result.get("limitations", []):
         console.print(f"  • {l}")
@@ -104,6 +114,191 @@ def research(topic: str = typer.Argument(..., help="研究主题")):
 
     console.print(f"\n[green]报告已保存至: {result.report_file}[/green]")
     console.print(f"共分析 {len(result.papers)} 篇论文，完成 {len(result.task_results)} 个研究任务")
+
+    # 评审结果
+    if result.critic_reviews:
+        final_review = result.critic_reviews[-1]
+        review_table = Table(title=f"评审结果（共 {len(result.critic_reviews)} 轮）", show_header=True)
+        review_table.add_column("维度", style="cyan")
+        review_table.add_column("得分", style="green")
+        for dim, score in final_review.dimension_scores.items():
+            bar = "█" * int(score * 10) + "░" * (10 - int(score * 10))
+            review_table.add_row(dim, f"{score:.2f}  {bar}")
+        review_table.add_row("─" * 10, "─" * 20)
+        review_table.add_row("[bold]综合评分[/bold]", f"[bold]{final_review.score:.2f}[/bold]")
+        console.print(review_table)
+
+        if result.revision_count > 0:
+            console.print(f"[yellow]经过 {result.revision_count} 轮修改[/yellow]")
+        else:
+            console.print("[green]首轮评审通过，无需修改[/green]")
+
+        if final_review.strengths:
+            console.print("\n[bold]报告优点:[/bold]")
+            for s in final_review.strengths:
+                console.print(f"  ✓ {s}")
+
+        if final_review.suggestions:
+            console.print("\n[bold]剩余改进建议:[/bold]")
+            for s in final_review.suggestions:
+                console.print(f"  • {s}")
+
+    if result.reflection:
+        r = result.reflection
+        table = Table(title="自我学习反思", show_header=True)
+        table.add_column("指标", style="cyan")
+        table.add_column("结果", style="green")
+        table.add_row("研究质量评分", f"{r.quality_score:.2f}")
+        table.add_row("情节ID", r.episode_id)
+        table.add_row("新增技能", str(r.skills_learned))
+        table.add_row("标签", ", ".join(r.tags) if r.tags else "-")
+        console.print(table)
+        if r.insights_summary:
+            console.print(Panel(r.insights_summary, title="核心洞见"))
+        if r.lessons_learned:
+            console.print("\n[bold]经验教训:[/bold]")
+            for lesson in r.lessons_learned:
+                console.print(f"  • {lesson}")
+
+    stats = orch.memory_stats()
+    console.print(
+        f"\n[dim]记忆库: {stats['episodes']} 个情节 | "
+        f"{stats['skills']} 个技能 | {stats['vectors']} 个向量[/dim]"
+    )
+
+
+@app.command()
+def chat():
+    """对话式交互：用自然语言描述你的想法，Agent 自动决定做什么。"""
+    from rich.prompt import Prompt
+    from src.agents.conversational_agent import ConversationalAgent
+    from src.core.llm import LLMClient
+
+    orch = get_orchestrator()
+    agent = ConversationalAgent(LLMClient(orch.settings), orch.memory)
+
+    console.print(Panel.fit(
+        "[bold cyan]Deep Research Agent - 对话模式[/bold cyan]\n"
+        "直接用自然语言描述你的研究想法或问题。\n"
+        "命令：[dim]/quit 退出 | /clear 清空历史 | /stats 查看记忆统计[/dim]",
+        border_style="cyan",
+    ))
+
+    while True:
+        try:
+            user_input = Prompt.ask("\n[bold green]你[/bold green]").strip()
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[yellow]再见[/yellow]")
+            break
+
+        if not user_input:
+            continue
+        if user_input.lower() in ("/quit", "/exit"):
+            console.print("[yellow]再见[/yellow]")
+            break
+        if user_input.lower() == "/clear":
+            agent.clear()
+            console.print("[dim]对话历史已清空[/dim]")
+            continue
+        if user_input.lower() == "/stats":
+            stats = orch.memory_stats()
+            console.print(f"[dim]情节: {stats['episodes']} | 技能: {stats['skills']} | 向量: {stats['vectors']}[/dim]")
+            continue
+
+        agent.add_user_message(user_input)
+
+        # 1. 路由决策
+        with console.status("[cyan]思考中...[/cyan]"):
+            action = agent.decide()
+
+        console.print(f"[dim]→ 意图: {action.raw_intent}  |  动作: {action.action}[/dim]")
+        if action.queries:
+            console.print(f"[dim]→ 检索词: {' / '.join(action.queries)}[/dim]")
+
+        # 2. 根据动作调用后端
+        try:
+            reply = _dispatch(orch, agent, action)
+        except Exception as e:
+            reply = f"[red]执行出错: {type(e).__name__}: {e}[/red]"
+
+        agent.add_assistant_message(reply)
+        console.print(Panel(reply, title="[bold magenta]Agent[/bold magenta]", border_style="magenta"))
+
+
+def _dispatch(orch, agent, action) -> str:
+    """把路由决策翻译成具体工具调用，并让Agent用自然语言总结结果。"""
+    a = action.action
+
+    if a in ("ask_user", "chitchat"):
+        return action.reply or "我在听，请继续说。"
+
+    if a == "memory_query":
+        stats = orch.memory_stats()
+        ctx = orch.memory.format_context_for_prompt(action.topic or "research")
+        agent.add_tool_result(f"memory stats: {stats}\n\ncontext:\n{ctx[:1500]}")
+        return agent.summarize_result(action, {"stats": stats, "context": ctx[:2000]})
+
+    if a == "evaluate":
+        topic = action.topic or (action.queries[0] if action.queries else "")
+        result = orch.evaluate_direction(topic, queries=action.queries or None)
+        brief = {
+            "feasibility": result.get("feasibility"),
+            "novelty": result.get("novelty"),
+            "impact": result.get("impact"),
+            "analysis": result.get("analysis", "")[:1500],
+            "recommendations": result.get("recommendations", []),
+            "benchmarks": result.get("benchmarks", []),
+            "paper_count": len(result.get("papers", [])),
+            "sample_papers": [
+                {"title": p.title, "url": p.url}
+                for p in result.get("papers", [])[:5]
+            ],
+        }
+        agent.add_tool_result(f"evaluate done. {brief}")
+        return agent.summarize_result(action, brief)
+
+    if a == "search":
+        papers = orch.search_papers_multi(action.queries or [action.topic], per_query=4)
+        brief = {
+            "count": len(papers),
+            "papers": [
+                {"title": p.title, "authors": p.authors[:3],
+                 "abstract": (p.abstract or "")[:200], "url": p.url}
+                for p in papers[:8]
+            ],
+        }
+        agent.add_tool_result(f"search done. got {len(papers)} papers.")
+        return agent.summarize_result(action, brief)
+
+    if a == "analyze":
+        from src.core.models import PaperItem
+        pid = action.paper_id.strip().split("/")[-1]
+        if not pid:
+            return "要分析论文的话，请给我 arXiv ID 或链接。"
+        papers = orch.arxiv.search(f"id:{pid}", max_results=1)
+        if not papers:
+            return f"没找到 arXiv ID 为 {pid} 的论文，确认一下？"
+        result = orch.analyze_paper(papers[0], action.focus or None)
+        result["_title"] = papers[0].title
+        agent.add_tool_result(f"analyze done for {papers[0].title}")
+        return agent.summarize_result(action, result)
+
+    if a == "research":
+        topic = action.topic or (action.queries[0] if action.queries else "")
+        console.print("[yellow]深度研究通常需要几分钟，请稍候...[/yellow]")
+        result = orch.run_deep_research(topic)
+        brief = {
+            "topic": result.topic,
+            "report_file": result.report_file,
+            "plan_size": len(result.plan),
+            "paper_count": len(result.papers),
+            "critic_score": result.critic_reviews[-1].score if result.critic_reviews else None,
+            "report_preview": result.final_report_markdown[:1500],
+        }
+        agent.add_tool_result(f"research done. report at {result.report_file}")
+        return agent.summarize_result(action, brief)
+
+    return action.reply or "我暂时不确定该怎么帮你，能再说得具体一点吗？"
 
 
 if __name__ == "__main__":

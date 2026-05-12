@@ -11,12 +11,19 @@ class Settings:
     planner_temperature: float = 0.2
     researcher_temperature: float = 0.3
     writer_temperature: float = 0.2
+    critic_temperature: float = 0.1
+    reviser_temperature: float = 0.3
     max_plan_items: int = 5
     search_backend: str = "duckduckgo"
     search_top_k: int = 6
     memory_top_k: int = 4
     context_max_chars: int = 7000
     max_reflection_rounds: int = 1
+    max_revision_rounds: int = 2
+    critic_threshold: float = 0.7
+    enable_rerank: bool = True
+    rerank_model: str = "BAAI/bge-reranker-base"
+    rerank_score_threshold: float = 0.3
     workspace_dir: Path = Path("workspace")
 
     @classmethod
@@ -33,12 +40,19 @@ class Settings:
             planner_temperature=float(os.getenv("PLANNER_TEMPERATURE", "0.2")),
             researcher_temperature=float(os.getenv("RESEARCHER_TEMPERATURE", "0.3")),
             writer_temperature=float(os.getenv("WRITER_TEMPERATURE", "0.2")),
+            critic_temperature=float(os.getenv("CRITIC_TEMPERATURE", "0.1")),
+            reviser_temperature=float(os.getenv("REVISER_TEMPERATURE", "0.3")),
             max_plan_items=int(os.getenv("MAX_PLAN_ITEMS", "5")),
             search_backend=os.getenv("SEARCH_BACKEND", "duckduckgo"),
             search_top_k=int(os.getenv("SEARCH_TOP_K", "6")),
             memory_top_k=int(os.getenv("MEMORY_TOP_K", "4")),
             context_max_chars=int(os.getenv("CONTEXT_MAX_CHARS", "7000")),
             max_reflection_rounds=int(os.getenv("MAX_REFLECTION_ROUNDS", "1")),
+            max_revision_rounds=int(os.getenv("MAX_REVISION_ROUNDS", "2")),
+            critic_threshold=float(os.getenv("CRITIC_THRESHOLD", "0.7")),
+            enable_rerank=os.getenv("ENABLE_RERANK", "true").lower() in ("1", "true", "yes"),
+            rerank_model=os.getenv("RERANK_MODEL", "BAAI/bge-reranker-base"),
+            rerank_score_threshold=float(os.getenv("RERANK_SCORE_THRESHOLD", "0.3")),
             workspace_dir=workspace,
         )
 

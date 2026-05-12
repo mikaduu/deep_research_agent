@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -57,6 +59,26 @@ class MemoryHit:
 
 
 @dataclass
+class CriticReview:
+    score: float
+    needs_revision: bool
+    dimension_scores: Dict[str, float]
+    suggestions: List[str] = field(default_factory=list)
+    missing_topics: List[str] = field(default_factory=list)
+    strengths: List[str] = field(default_factory=list)
+
+
+@dataclass
+class ReflectionResult:
+    episode_id: str
+    quality_score: float
+    insights_summary: str
+    tags: List[str] = field(default_factory=list)
+    lessons_learned: List[str] = field(default_factory=list)
+    skills_learned: int = 0
+
+
+@dataclass
 class ResearchResult:
     topic: str
     plan: List[TaskPlanItem]
@@ -65,3 +87,6 @@ class ResearchResult:
     report_file: str
     papers: List[PaperItem] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    reflection: Optional[ReflectionResult] = None
+    critic_reviews: List[CriticReview] = field(default_factory=list)
+    revision_count: int = 0
