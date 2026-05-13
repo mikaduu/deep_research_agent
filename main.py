@@ -104,67 +104,67 @@ def analyze(url: str = typer.Argument(..., help="论文arXiv ID或URL"),
 
 
 @app.command()
-def research(topic: str = typer.Argument(..., help="研究主题")):
-    """对主题进行深度研究并生成报告"""
-    console.print(Panel(f"[bold]深度研究:[/bold] {topic}", style="green"))
-    orch = get_orchestrator()
+def research(
+    topic: str = typer.Argument(..., help="研究主题"),
+    max_steps: int = typer.Option(30, "--max-steps", "-s", help="最大决策步数"),
+    max_tokens: int = typer.Option(200000, "--max-tokens", "-t", help="总 token 上限"),
+    legacy: bool = typer.Option(False, "--legacy", help="使用老的编排式流程（降级）"),
+):
+    """对主题进行深度研究并生成报告（默认自主模式）"""
+    from src.agents.manager import ResearchManager
 
-    with console.status("研究中，请稍候..."):
-        result = orch.run_deep_research(topic)
+    root = Path(__file__).parent
+    settings = Settings.from_env(root)
 
-    console.print(f"\n[green]报告已保存至: {result.report_file}[/green]")
-    console.print(f"共分析 {len(result.papers)} 篇论文，完成 {len(result.task_results)} 个研究任务")
+    if legacy:
+        # 降级：走老的编排式 Orchestrator
+        console.print(Panel(f"[bold]深度研究 (编排模式):[/bold] {topic}", style="yellow"))
+        orch = get_orchestrator()
+        with console.status("研究中，请稍候..."):
+            result = orch.run_deep_research(topic)
+        console.print(f"\n[green]报告已保存至: {result.report_file}[/green]")
+        stats = orch.memory_stats()
+        console.print(f"[dim]记忆库: {stats['episodes']} 情节 | {stats['skills']} 技能 | {stats['vectors']} 向量[/dim]")
+        return
 
-    # 评审结果
-    if result.critic_reviews:
-        final_review = result.critic_reviews[-1]
-        review_table = Table(title=f"评审结果（共 {len(result.critic_reviews)} 轮）", show_header=True)
-        review_table.add_column("维度", style="cyan")
-        review_table.add_column("得分", style="green")
-        for dim, score in final_review.dimension_scores.items():
-            bar = "█" * int(score * 10) + "░" * (10 - int(score * 10))
-            review_table.add_row(dim, f"{score:.2f}  {bar}")
-        review_table.add_row("─" * 10, "─" * 20)
-        review_table.add_row("[bold]综合评分[/bold]", f"[bold]{final_review.score:.2f}[/bold]")
-        console.print(review_table)
+    # 默认：自主模式
+    console.print(Panel(
+        f"[bold cyan]自主研究模式[/bold cyan]\n"
+        f"主题: {topic}\n"
+        f"预算: {max_steps} 步 / {max_tokens:,} tokens",
+        border_style="cyan",
+    ))
 
-        if result.revision_count > 0:
-            console.print(f"[yellow]经过 {result.revision_count} 轮修改[/yellow]")
+    manager = ResearchManager(settings, max_steps=max_steps, max_total_tokens=max_tokens)
+    console.print("[dim]Agent 开始自主研究...[/dim]\n")
+    result = manager.run(topic)
+
+    # 结果展示
+    console.print(f"\n{'─' * 60}")
+    if result.finished:
+        console.print(f"[green]研究完成[/green] ({result.finish_reason})")
+        output = result.final_output
+        if isinstance(output, dict):
+            report = output.get("output", str(output))
         else:
-            console.print("[green]首轮评审通过，无需修改[/green]")
+            report = str(output)
+        console.print(Panel(report[:3000], title="最终报告（前 3000 字）", border_style="green"))
+    else:
+        console.print(f"[yellow]研究未完成[/yellow] (原因: {result.finish_reason})")
+        if result.steps:
+            last = result.steps[-1]
+            console.print(f"[dim]最后一步: {last.tool_name} → {last.tool_result.error if last.tool_result and not last.tool_result.success else 'ok'}[/dim]")
 
-        if final_review.strengths:
-            console.print("\n[bold]报告优点:[/bold]")
-            for s in final_review.strengths:
-                console.print(f"  ✓ {s}")
+    # 统计
+    console.print(f"\n[dim]总步数: {len(result.steps)} | 总 tokens: {result.total_tokens:,} | 耗时: {result.total_elapsed_ms/1000:.1f}s[/dim]")
 
-        if final_review.suggestions:
-            console.print("\n[bold]剩余改进建议:[/bold]")
-            for s in final_review.suggestions:
-                console.print(f"  • {s}")
-
-    if result.reflection:
-        r = result.reflection
-        table = Table(title="自我学习反思", show_header=True)
-        table.add_column("指标", style="cyan")
-        table.add_column("结果", style="green")
-        table.add_row("研究质量评分", f"{r.quality_score:.2f}")
-        table.add_row("情节ID", r.episode_id)
-        table.add_row("新增技能", str(r.skills_learned))
-        table.add_row("标签", ", ".join(r.tags) if r.tags else "-")
-        console.print(table)
-        if r.insights_summary:
-            console.print(Panel(r.insights_summary, title="核心洞见"))
-        if r.lessons_learned:
-            console.print("\n[bold]经验教训:[/bold]")
-            for lesson in r.lessons_learned:
-                console.print(f"  • {lesson}")
-
-    stats = orch.memory_stats()
-    console.print(
-        f"\n[dim]记忆库: {stats['episodes']} 个情节 | "
-        f"{stats['skills']} 个技能 | {stats['vectors']} 个向量[/dim]"
-    )
+    # 执行轨迹
+    if result.steps:
+        console.print("\n[bold]执行轨迹:[/bold]")
+        for s in result.steps:
+            status = "✓" if (s.tool_result and s.tool_result.success) else "✗"
+            name = s.tool_name or "(thinking)"
+            console.print(f"  {s.step_idx+1}. [{status}] {name}  ({s.tokens_used} tok, {s.elapsed_ms}ms)")
 
 
 @app.command()

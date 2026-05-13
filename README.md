@@ -24,7 +24,7 @@
 - **📝 研究报告生成** - 自动生成结构化、引用完整的研究报告
 - **🧠 记忆系统** - 基于 TF-IDF 的 RAG 检索，支持上下文关联
 - **🔄 上下文管理** - 智能管理对话历史，防止 token 溢出
-- **🔌 MCP 支持** - 可扩展的外部工具集成协议
+- **🔌 Tool 系统** - 12 个内置工具 + 可扩展的 Tool 注册表
 
 ### 🤖 Multi-Agent 架构
 
@@ -185,31 +185,48 @@ python main.py research "大语言模型的可解释性研究"
 ```
 deep_research_agent/
 ├── src/
-│   ├── config.py              # 配置管理
-│   ├── models.py              # 数据模型
-│   ├── llm.py                 # LLM 客户端
-│   ├── prompts.py             # 提示词模板
-│   ├── orchestrator.py        # 核心编排器
-│   ├── direction_evaluator.py # 方向评估 Agent
-│   ├── paper_analyzer.py      # 论文分析 Agent
-│   ├── context_manager.py     # 上下文管理
-│   ├── mcp_client.py          # MCP 客户端
-│   ├── memory/
-│   │   ├── retriever.py       # TF-IDF RAG 检索
-│   │   └── store.py           # 笔记持久化
-│   └── services/
-│       └── paper_search.py    # 论文搜索服务
-├── workspace/
-│   ├── notes/                 # 研究笔记
-│   └── reports/               # 生成的报告
-├── main.py                    # CLI 入口
-├── requirements.txt
-├── environment.yml
-└── docs/                      # 详细文档（不发布，本地查看）
-    ├── ARCHITECTURE.md        # 完整架构说明
-    ├── MEMORY.md              # 三层记忆系统详解
-    ├── LEARNING.md            # 反思引擎详解
-    └── ROADMAP.md             # 未来发展路线图
+│   ├── orchestrator.py              # 核心编排器
+│   ├── core/                        # 基础设施层
+│   │   ├── config.py                # Settings 配置
+│   │   ├── context_manager.py       # 会话记忆 Layer 1
+│   │   ├── llm.py                   # LLM 客户端 (invoke + invoke_with_tools)
+│   │   ├── models.py                # 数据模型
+│   │   ├── prompts.py               # 提示词模板
+│   │   └── utils.py                 # JSON 解析工具
+│   ├── tools/                       # 工具抽象层（autonomous 基础）
+│   │   ├── tool.py                  # Tool / ToolResult / ToolRegistry
+│   │   ├── search_tools.py          # arxiv + s2 搜索 tool
+│   │   ├── paper_tools.py           # fetch 全文 + analyze tool
+│   │   └── memory_tools.py          # retrieve / save_note / save_episode tool
+│   ├── agents/                      # Agent 层
+│   │   ├── base_agent.py            # BaseAgent (autonomous ReAct loop 基类)
+│   │   ├── conversational_agent.py  # 对话路由 Agent
+│   │   ├── direction_evaluator.py   # 方向评估 Agent
+│   │   ├── paper_analyzer.py        # 论文深度分析 Agent
+│   │   ├── critic.py                # 评审 Agent
+│   │   └── reviser.py               # 修订 Agent
+│   ├── memory/                      # 三层记忆 + 语义索引
+│   │   ├── memory_manager.py        # MemoryManager 统一入口
+│   │   ├── episodic_memory.py       # 情节记忆 (SQLite+FTS5)
+│   │   ├── skill_memory.py          # 技能记忆 (SQLite+FTS5)
+│   │   ├── vector_store.py          # Chroma 向量存储
+│   │   ├── reranker.py              # Cross-Encoder 精排
+│   │   └── store.py                 # Markdown 笔记落盘
+│   ├── learning/                    # 自我学习
+│   │   └── reflection.py            # ReflectionEngine (反思闭环)
+│   └── services/                    # 外部服务
+│       ├── paper_search.py          # arXiv + Semantic Scholar
+│       └── paper_fetcher.py         # PDF 下载 + 章节提取
+├── workspace/                       # 运行时数据 (.gitignore 忽略)
+│   ├── memory/ notes/ reports/ pdf_cache/ vector_db/
+├── main.py                          # CLI 入口
+├── requirements.txt / environment.yml
+└── docs/                            # 详细文档（不发布，本地查看）
+    ├── ARCHITECTURE.md              # 完整架构说明
+    ├── TOOLS.md                     # 工具抽象 + BaseAgent 详解
+    ├── MEMORY.md                    # 三层记忆系统详解
+    ├── LEARNING.md                  # 反思引擎详解
+    └── ROADMAP.md                   # 发展路线图
 ```
 
 ### 核心组件
@@ -287,35 +304,45 @@ class CustomAgent:
         return self.llm.invoke([{"role": "user", "content": prompt}], 0.3)
 ```
 
-### 集成 MCP 工具
+### 自定义工具（Tool 系统）
 
 ```python
-from src.mcp_client import MCPClient
+from src.tools import Tool, ToolRegistry, ToolResult
 
-mcp = MCPClient()
-mcp.register_tool(
-    name="custom_tool",
-    description="自定义工具描述",
-    parameters={"param1": "string", "param2": "number"}
+my_tool = Tool(
+    name="my_custom_tool",
+    description="What this tool does (LLM reads this to decide when to use it)",
+    parameters={
+        "type": "object",
+        "properties": {"query": {"type": "string"}},
+        "required": ["query"],
+    },
+    run=lambda args: ToolResult(success=True, content=f"Result for {args['query']}"),
 )
 
-result = mcp.call_tool("custom_tool", {"param1": "value", "param2": 42})
+# 注册到 Manager 的工具箱
+registry = ToolRegistry()
+registry.register(my_tool)
 ```
 
 ---
 
 ## 📚 文档
 
-- [📐 架构详解](docs/ARCHITECTURE.md) - 详细的代码架构和设计文档
+- [📐 架构详解](docs/ARCHITECTURE.md) - 分层架构、数据流、执行模式
+- [🔧 工具层 + BaseAgent](docs/TOOLS.md) - autonomous 基础抽象详解
 - [🧠 记忆系统详解](docs/MEMORY.md) - 三层记忆 + rerank 实现
-- [🎓 学习引擎详解](docs/LEARNING.md) - ReflectionEngine 反思闭环
+- [🎓 学习引擎详解](docs/LEARNING.md) - ReflectionEngine + Skill-Creator 范式
 - [🗺️ 发展路线图](docs/ROADMAP.md) - 未来功能规划和优先级
 
 ### 当前开发重点（见 ROADMAP）
 
-- 🚧 **优先级 1** - 自编排式 Agent 重构（把固定管线换成 ReAct-style autonomous loop）
-- 📋 **优先级 2** - Summarizer 加全文阅读能力（让 research 不再只看 abstract）
-- 📋 **优先级 3** - 接入 WebSearch，突破 arXiv 的学术信息墙
+- ✅ **Step 1-6 全部完成** — 自主研究架构已就绪
+  - Tool 抽象 + BaseAgent + 12 个工具
+  - ResearchManager（主脑 autonomous agent）
+  - CriticWorker / ReviserWorker（autonomous workers）
+  - web_search / web_fetch（突破学术信息墙）
+- 📋 **下一步** — LangGraph 对照版本 / GitHub 搜索 / Web UI
 
 ---
 

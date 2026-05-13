@@ -5,10 +5,18 @@ PaperAnalyzer - 深度论文分析 Agent
   1. 优先尝试下载全文 PDF 并按章节提取
   2. 按章节分块发给 LLM 逐段分析（map 阶段）
   3. 汇总各段分析结果做综合（reduce 阶段）
-  4. 如果全文获取失败，降级到摘要分析（保持原有行为）
+  4. 输出符合 paper-reader skill 质量标准的结构化笔记
+  5. 如果全文获取失败，降级到摘要分析
+
+质量标准（对齐 paper-reader skill）：
+  - 零遗漏：每个公式、每个表格、每个图都要覆盖
+  - 具体性：引用具体数字，不说"效果好"
+  - 批判性：strengths/weaknesses 必须有具体证据
+  - 概念链接：关键术语用 [[Concept]] 标记
 """
 
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -19,14 +27,15 @@ from ..core.utils import extract_json_object
 from ..services.paper_fetcher import PaperFetcher, PaperFullText
 
 
-# 章节切分的优先级（按这个顺序尝试分块）
 SECTION_ORDER = [
     "abstract", "introduction", "related_work",
     "method", "experiments", "discussion", "conclusion",
 ]
 
-# 单个 chunk 的字符上限（对应大约 3-5k tokens，留出 LM 输出空间）
 CHUNK_CHAR_LIMIT = 6000
+
+# 笔记输出目录
+NOTES_SUBDIR = "paper_notes"
 
 
 class PaperAnalyzer:
@@ -36,10 +45,8 @@ class PaperAnalyzer:
         self.fetcher = PaperFetcher(
             cache_dir=settings.workspace_dir / "pdf_cache"
         )
-
-    # ------------------------------------------------------------------ #
-    # 公开接口
-    # ------------------------------------------------------------------ #
+        self.notes_dir = settings.workspace_dir / NOTES_SUBDIR
+        self.notes_dir.mkdir(parents=True, exist_ok=True)
 
     def analyze(
         self,
@@ -47,40 +54,30 @@ class PaperAnalyzer:
         focus: Optional[str] = None,
         use_fulltext: bool = True,
     ) -> Dict:
-        """
-        深度分析论文。
-
-        Args:
-            paper: 论文元数据
-            focus: 可选关注点
-            use_fulltext: 是否尝试全文分析（失败会自动降级到摘要）
-        """
         if use_fulltext:
             fulltext = self.fetcher.fetch_fulltext(paper.paper_id)
             if fulltext and fulltext.num_chars > 500:
-                return self._analyze_fulltext(paper, fulltext, focus)
+                result = self._analyze_fulltext(paper, fulltext, focus)
+                self._save_note(paper, result)
+                return result
 
-        # 降级：只用 abstract
-        return self._analyze_abstract(paper, focus)
+        result = self._analyze_abstract(paper, focus)
+        self._save_note(paper, result)
+        return result
 
     # ------------------------------------------------------------------ #
     # 全文分析（两段式 map-reduce）
     # ------------------------------------------------------------------ #
 
     def _analyze_fulltext(
-        self,
-        paper: PaperItem,
-        fulltext: PaperFullText,
-        focus: Optional[str],
+        self, paper: PaperItem, fulltext: PaperFullText, focus: Optional[str],
     ) -> Dict:
-        # Map 阶段：按章节分析
         chunks = self._build_chunks(fulltext)
         chunk_summaries: List[Dict] = []
         for chunk_name, chunk_text in chunks:
             summary = self._analyze_chunk(paper, chunk_name, chunk_text, focus)
             chunk_summaries.append({"section": chunk_name, "summary": summary})
 
-        # Reduce 阶段：综合所有 chunk 结果
         final = self._synthesize(paper, chunk_summaries, focus)
         final["_source"] = "fulltext"
         final["_num_pages"] = fulltext.num_pages
@@ -89,14 +86,8 @@ class PaperAnalyzer:
         return final
 
     def _build_chunks(self, ft: PaperFullText) -> List[tuple]:
-        """
-        构建 (section_name, text) 的 chunk 列表。
-        优先按识别到的章节切，章节太长再按字符切；完全识别不到就按字符切 raw_text。
-        """
         chunks: List[tuple] = []
-
         if ft.sections:
-            # 按 SECTION_ORDER 遍历已识别章节
             for key in SECTION_ORDER:
                 text = ft.sections.get(key)
                 if not text:
@@ -104,21 +95,15 @@ class PaperAnalyzer:
                 if len(text) <= CHUNK_CHAR_LIMIT:
                     chunks.append((key, text))
                 else:
-                    # 长章节按字符切小块
                     for i, sub in enumerate(self._split_by_chars(text, CHUNK_CHAR_LIMIT)):
                         chunks.append((f"{key}_part{i+1}", sub))
-            # references 一般不分析，跳过
-
         if not chunks:
-            # 完全没识别到章节：用 raw_text 按字符硬切
             for i, sub in enumerate(self._split_by_chars(ft.raw_text, CHUNK_CHAR_LIMIT)):
                 chunks.append((f"chunk_{i+1}", sub))
-
         return chunks
 
     @staticmethod
     def _split_by_chars(text: str, limit: int) -> List[str]:
-        """按字符上限切分，尽量在段落边界切。"""
         if len(text) <= limit:
             return [text]
         parts = []
@@ -135,63 +120,68 @@ class PaperAnalyzer:
         return parts
 
     def _analyze_chunk(
-        self,
-        paper: PaperItem,
-        section_name: str,
-        chunk_text: str,
-        focus: Optional[str],
+        self, paper: PaperItem, section_name: str, chunk_text: str, focus: Optional[str],
     ) -> str:
-        """对单个章节/分块做摘要式分析，返回纯文本。"""
-        focus_line = f"\n用户关注点: {focus}" if focus else ""
-        prompt = f"""你正在阅读论文 "{paper.title}" 的 **{section_name}** 部分。
-请提取本段的核心信息，保留关键细节（算法、数据集、实验配置、数值结果等）。{focus_line}
+        focus_line = f"\nUser focus: {focus}" if focus else ""
+        prompt = f"""You are reading the **{section_name}** section of "{paper.title}".
+Extract ALL key information following these quality rules:{focus_line}
 
-章节内容:
+Quality rules:
+- Extract EVERY formula (with variable definitions)
+- Extract EVERY table (preserve all rows/columns)
+- Note EVERY figure reference with its interpretation
+- Use specific numbers, not vague claims ("achieves 82.3 F1" not "achieves good results")
+- Wrap key technical terms in [[Concept]] on first appearance
+- If a formula appears, format as: name, LaTeX block, one-line meaning, symbol legend
+
+Section content:
 {chunk_text}
 
-要求:
-- 用中文输出 200-400 字的摘要
-- 保留重要公式/指标/数据集名，不要虚构
-- 不做概括性评价，只陈述事实
-""".strip()
+Output: structured extraction in Markdown (200-500 words). Preserve all quantitative details.""".strip()
 
         return self.llm.invoke(
             [{"role": "user", "content": prompt}], temperature=0.2
         ).strip()
 
     def _synthesize(
-        self,
-        paper: PaperItem,
-        chunk_summaries: List[Dict],
-        focus: Optional[str],
+        self, paper: PaperItem, chunk_summaries: List[Dict], focus: Optional[str],
     ) -> Dict:
-        """把分段摘要汇总成结构化分析结果。"""
         combined = "\n\n".join(
             f"## {c['section']}\n{c['summary']}" for c in chunk_summaries
         )
-        focus_line = f"\n用户关注点: {focus}" if focus else ""
-        prompt = f"""基于以下对论文 "{paper.title}" 各章节的分析摘要，综合输出结构化分析结果。{focus_line}
+        focus_line = f"\nUser focus: {focus}" if focus else ""
+        prompt = f"""Based on the section-by-section analysis of "{paper.title}", produce a final structured analysis.{focus_line}
 
-章节摘要:
+Section analyses:
 {combined}
 
-返回 JSON:
+Return JSON with this exact schema:
 {{
-  "summary": "全文核心内容概述（300字以内，覆盖问题-方法-结果）",
-  "problem": "解决的核心问题（具体，不泛泛）",
-  "contributions": ["贡献1（具体）", "贡献2", "贡献3"],
-  "methods": ["方法细节1", "方法细节2"],
-  "datasets": ["使用的数据集1", "数据集2"],
-  "results": "主要实验结果（保留关键指标数字）",
-  "limitations": ["局限1", "局限2"],
-  "future_work": "作者提出的未来方向",
+  "tldr": "Single sentence, ≤50 words, capturing the core contribution",
+  "problem": "What concrete problem does the paper solve?",
+  "prior_limitations": "What was broken/missing in prior work?",
+  "contributions": ["Contribution 1 headline — what + why it matters", "..."],
+  "method_summary": "Architecture/approach overview (100-200 words, use [[Concept]] for key terms)",
+  "formulas": [
+    {{"name": "formula name", "latex": "LaTeX string", "meaning": "one-line", "symbols": {{"x": "meaning"}}}}
+  ],
+  "datasets": [{{"name": "...", "size": "...", "used_for": "train/eval"}}],
+  "results": "Main results with specific numbers (reference tables)",
+  "ablations": "Key ablation findings",
+  "strengths": ["Specific strength citing a number or design choice"],
+  "weaknesses": ["Specific weakness — missing experiment, unvalidated assumption, etc."],
+  "reproducibility": {{"code": true/false, "weights": true/false, "details_sufficient": true/false, "data_public": true/false}},
+  "related_work": ["[[Prior Work 1]] — relationship", "[[Prior Work 2]] — relationship"],
+  "future_work": "What the authors propose next",
+  "tags": ["tag1", "tag2", "tag3"],
   "relevance_score": 0.0
 }}
 
-规则：
-- 基于章节摘要的事实，不要虚构
-- 数值、数据集、baseline 名称要准确
-""".strip()
+Rules:
+- Based on section analyses only, do not hallucinate
+- Numbers and dataset names must be accurate
+- Strengths/weaknesses must cite specific evidence, not vibes
+- formulas array: include ALL formulas found in the section analyses""".strip()
 
         response = self.llm.invoke(
             [{"role": "user", "content": prompt}], temperature=0.2
@@ -199,11 +189,10 @@ class PaperAnalyzer:
         result = extract_json_object(response)
         if not result:
             return {
-                "summary": response, "problem": "",
-                "contributions": [], "methods": [],
-                "datasets": [], "results": "",
-                "limitations": [], "future_work": "",
-                "relevance_score": 0.0,
+                "tldr": "", "problem": "", "contributions": [],
+                "method_summary": response, "formulas": [],
+                "datasets": [], "results": "", "strengths": [],
+                "weaknesses": [], "tags": [], "relevance_score": 0.0,
             }
         return result
 
@@ -212,36 +201,166 @@ class PaperAnalyzer:
     # ------------------------------------------------------------------ #
 
     def _analyze_abstract(self, paper: PaperItem, focus: Optional[str]) -> Dict:
-        prompt = self._build_abstract_prompt(paper, focus)
+        focus_line = f"\nFocus: {focus}" if focus else ""
+        prompt = f"""Analyze this paper based on its abstract only (full text unavailable).{focus_line}
+
+Title: {paper.title}
+Authors: {', '.join(paper.authors[:5])}
+Published: {paper.published}
+Abstract: {paper.abstract}
+
+Return JSON:
+{{
+  "tldr": "Single sentence core contribution",
+  "problem": "Core problem solved",
+  "contributions": ["contribution 1", "contribution 2"],
+  "method_summary": "Method overview based on abstract",
+  "formulas": [],
+  "datasets": [],
+  "results": "Results mentioned in abstract (if any)",
+  "strengths": ["Based on abstract"],
+  "weaknesses": ["Cannot assess without full text"],
+  "tags": ["tag1", "tag2"],
+  "relevance_score": 0.0
+}}""".strip()
+
         response = self.llm.invoke(
             [{"role": "user", "content": prompt}], temperature=0.2
         )
         result = extract_json_object(response)
         if not result:
-            result = {
-                "summary": response, "contributions": [],
-                "methods": [], "limitations": [],
-            }
+            result = {"tldr": response, "contributions": [], "tags": []}
         result["_source"] = "abstract_only"
         return result
 
-    def _build_abstract_prompt(self, paper: PaperItem, focus: Optional[str]) -> str:
-        focus_line = f"\n特别关注: {focus}" if focus else ""
-        return f"""请基于论文摘要做初步分析（全文暂时无法获取，分析仅基于abstract）:{focus_line}
+    # ------------------------------------------------------------------ #
+    # 笔记保存（对齐 paper-reader skill 的 note 格式）
+    # ------------------------------------------------------------------ #
 
-标题: {paper.title}
-作者: {', '.join(paper.authors[:5])}
-发表时间: {paper.published}
-摘要: {paper.abstract}
+    def _save_note(self, paper: PaperItem, analysis: Dict) -> Optional[Path]:
+        """保存结构化 Markdown 笔记到 workspace/paper_notes/"""
+        method_name = self._extract_method_name(paper, analysis)
+        filename = f"{method_name}.md"
+        path = self.notes_dir / filename
 
-返回JSON:
-{{
-  "summary": "核心内容概述(200字以内)",
-  "problem": "解决的核心问题",
-  "contributions": ["贡献1", "贡献2"],
-  "methods": ["方法1", "方法2"],
-  "results": "主要实验结果（如摘要中提及）",
-  "limitations": ["局限1（基于摘要推测）"],
-  "future_work": "未来工作方向",
-  "relevance_score": 0.0
-}}""".strip()
+        now = datetime.utcnow().strftime("%Y-%m-%d")
+        tags = analysis.get("tags", [])
+
+        # YAML frontmatter
+        frontmatter = (
+            f"---\n"
+            f"title: \"{paper.title}\"\n"
+            f"method_name: \"{method_name}\"\n"
+            f"arxiv_id: \"{paper.paper_id}\"\n"
+            f"authors: [{', '.join(paper.authors[:5])}]\n"
+            f"year: {paper.published[:4] if paper.published else 'unknown'}\n"
+            f"tags: [{', '.join(tags)}]\n"
+            f"read_mode: {'full' if analysis.get('_source') == 'fulltext' else 'abstract'}\n"
+            f"created: {now}\n"
+            f"---\n\n"
+        )
+
+        # Body
+        body_parts = [f"# {paper.title}\n"]
+
+        if analysis.get("tldr"):
+            body_parts.append(f"## TL;DR\n\n> {analysis['tldr']}\n")
+
+        if analysis.get("contributions"):
+            body_parts.append("## Core Contributions\n")
+            for i, c in enumerate(analysis["contributions"], 1):
+                body_parts.append(f"{i}. **{c}**")
+            body_parts.append("")
+
+        if analysis.get("problem"):
+            body_parts.append(f"## Problem & Motivation\n\n{analysis['problem']}\n")
+            if analysis.get("prior_limitations"):
+                body_parts.append(f"**Prior limitations**: {analysis['prior_limitations']}\n")
+
+        if analysis.get("method_summary"):
+            body_parts.append(f"## Core Method\n\n{analysis['method_summary']}\n")
+
+        if analysis.get("formulas"):
+            body_parts.append("## Formulas\n")
+            for f in analysis["formulas"]:
+                body_parts.append(f"### {f.get('name', 'Formula')}\n")
+                body_parts.append(f"$$\n{f.get('latex', '')}\n$$\n")
+                body_parts.append(f"**Meaning**: {f.get('meaning', '')}\n")
+                if f.get("symbols"):
+                    body_parts.append("**Symbols**:")
+                    for sym, meaning in f["symbols"].items():
+                        body_parts.append(f"- ${sym}$: {meaning}")
+                    body_parts.append("")
+
+        if analysis.get("datasets"):
+            body_parts.append("## Datasets\n")
+            body_parts.append("| Dataset | Size | Used for |")
+            body_parts.append("|---------|------|----------|")
+            for d in analysis["datasets"]:
+                body_parts.append(f"| {d.get('name','')} | {d.get('size','')} | {d.get('used_for','')} |")
+            body_parts.append("")
+
+        if analysis.get("results"):
+            body_parts.append(f"## Results\n\n{analysis['results']}\n")
+
+        if analysis.get("ablations"):
+            body_parts.append(f"## Ablations\n\n{analysis['ablations']}\n")
+
+        if analysis.get("strengths") or analysis.get("weaknesses"):
+            body_parts.append("## Critical View\n")
+            if analysis.get("strengths"):
+                body_parts.append("### Strengths")
+                for s in analysis["strengths"]:
+                    body_parts.append(f"- {s}")
+                body_parts.append("")
+            if analysis.get("weaknesses"):
+                body_parts.append("### Weaknesses")
+                for w in analysis["weaknesses"]:
+                    body_parts.append(f"- {w}")
+                body_parts.append("")
+
+        if analysis.get("reproducibility"):
+            r = analysis["reproducibility"]
+            body_parts.append("### Reproducibility\n")
+            body_parts.append(f"- [{'x' if r.get('code') else ' '}] Code released")
+            body_parts.append(f"- [{'x' if r.get('weights') else ' '}] Weights released")
+            body_parts.append(f"- [{'x' if r.get('details_sufficient') else ' '}] Training details sufficient")
+            body_parts.append(f"- [{'x' if r.get('data_public') else ' '}] Data publicly available")
+            body_parts.append("")
+
+        if analysis.get("related_work"):
+            body_parts.append("## Related Work\n")
+            for rw in analysis["related_work"]:
+                body_parts.append(f"- {rw}")
+            body_parts.append("")
+
+        content = frontmatter + "\n".join(body_parts)
+        path.write_text(content, encoding="utf-8")
+
+        analysis["_note_path"] = str(path)
+        analysis["_method_name"] = method_name
+        return path
+
+    def _extract_method_name(self, paper: PaperItem, analysis: Dict) -> str:
+        """从论文标题提取方法名作为文件名。"""
+        title = paper.title or ""
+        if ":" in title:
+            candidate = title.split(":")[0].strip()
+            if len(candidate) <= 30:
+                return self._sanitize_filename(candidate)
+        if analysis.get("contributions"):
+            first = analysis["contributions"][0]
+            if "**" in first:
+                parts = first.split("**")
+                if len(parts) >= 2 and len(parts[1]) <= 30:
+                    return self._sanitize_filename(parts[1])
+        return paper.paper_id.replace("/", "_")
+
+    @staticmethod
+    def _sanitize_filename(name: str) -> str:
+        """清理文件名：去特殊字符，希腊字母转 ASCII。"""
+        replacements = {"π": "Pi", "σ": "Sigma", "α": "Alpha", "β": "Beta", "γ": "Gamma"}
+        for greek, ascii_name in replacements.items():
+            name = name.replace(greek, ascii_name)
+        safe = "".join(c if c.isalnum() or c in "-_ " else "" for c in name)
+        return safe.strip().replace(" ", "_") or "unnamed"

@@ -178,6 +178,23 @@ class MemoryManager:
 
         return "\n\n".join(parts) if parts else ""
 
+    def get_related_papers(self, query: str, top_k: int = 5) -> list:
+        """只检索论文笔记（doc_id 前缀 'paper:'），不混入 episode/skill。"""
+        hits = self.vector.retrieve(query, top_k * 4)
+        paper_hits = [h for h in hits if (h.doc_id or "").startswith("paper:")]
+
+        if not self.enable_rerank or not self.reranker or not paper_hits:
+            return paper_hits[:top_k]
+
+        candidates = [
+            RerankCandidate(
+                doc_id=h.doc_id, content=h.content, source="paper", raw=h,
+            )
+            for h in paper_hits
+        ]
+        reranked = self.reranker.rerank(query, candidates, top_k=top_k)
+        return [c.raw for c in reranked]
+
     # ------------------------------------------------------------------ #
     # 向量命中回查与跨源去重
     # ------------------------------------------------------------------ #
