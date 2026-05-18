@@ -1,0 +1,88 @@
+{
+  "per_query": [
+    {
+      "query": "Benchmark landscape mapping\n触发: When proposing a n",
+      "description": "检索 skill:f10027b3",
+      "relevant_count": 1,
+      "retrieved_with_rerank": 7,
+      "retrieved_without_rerank": 8,
+      "recall@k_rerank": 0.0,
+      "precision@k_rerank": 0.0,
+      "ndcg@k_rerank": 0.0,
+      "recall@k_raw": 0.0,
+      "precision@k_raw": 0.0,
+      "ndcg@k_raw": 0.0
+    },
+    {
+      "query": "Feasibility assessment via component search\n触发: Wh",
+      "description": "检索 skill:c5c85431",
+      "relevant_count": 1,
+      "retrieved_with_rerank": 8,
+      "retrieved_without_rerank": 8,
+      "recall@k_rerank": 0.0,
+      "precision@k_rerank": 0.0,
+      "ndcg@k_rerank": 0.0,
+      "recall@k_raw": 0.0,
+      "precision@k_raw": 0.0,
+      "ndcg@k_raw": 0.0
+    },
+    {
+      "query": "测试用例生成领域的现有benchmark主要集中在单元测试和代码生成任务上，例如Defects4J（",
+      "description": "检索 task:测试用例生成领域的现有benchmark",
+      "relevant_count": 1,
+      "retrieved_with_rerank": 7,
+      "retrieved_without_rerank": 8,
+      "recall@k_rerank": 1.0,
+      "precision@k_rerank": 0.25,
+      "ndcg@k_rerank": 0.25,
+      "recall@k_raw": 0.0,
+      "precision@k_raw": 0.0,
+      "ndcg@k_raw": 0.0
+    },
+    {
+      "query": "Multi-query synthesis for novel combinations\n触发: W",
+      "description": "检索 skill:17b99352",
+      "relevant_count": 1,
+      "retrieved_with_rerank": 8,
+      "retrieved_without_rerank": 8,
+      "recall@k_rerank": 0.0,
+      "precision@k_rerank": 0.0,
+      "ndcg@k_rerank": 0.0,
+      "recall@k_raw": 0.0,
+      "precision@k_raw": 0.0,
+      "ndcg@k_raw": 0.0
+    },
+    {
+      "query": "1) 现有研究现状总结：World model 是近年来人工智能领域的热点方向，尤其在强化学习、规划",
+      "description": "检索 direction:我想做一篇和world model相关的综述",
+      "relevant_count": 1,
+      "retrieved_with_rerank": 7,
+      "retrieved_without_rerank": 8,
+      "recall@k_rerank": 1.0,
+      "precision@k_rerank": 0.25,
+      "ndcg@k_rerank": 0.25,
+      "recall@k_raw": 0.0,
+      "precision@k_raw": 0.0,
+      "ndcg@k_raw": 0.0
+    }
+  ],
+  "aggregate": {
+    "k": 4,
+    "num_queries": 5,
+    "with_rerank": {
+      "avg_recall@k": 0.4,
+      "avg_precision@k": 0.1,
+      "avg_ndcg@k": 0.1
+    },
+    "without_rerank": {
+      "avg_recall@k": 0.0,
+      "avg_precision@k": 0.0,
+      "avg_ndcg@k": 0.0
+    },
+    "rerank_improvement": {
+      "recall_delta": 0.4,
+      "precision_delta": 0.1,
+      "ndcg_delta": 0.1
+    }
+  }
+}

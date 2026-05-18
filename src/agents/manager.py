@@ -17,7 +17,7 @@ from ..learning.reflection import ReflectionEngine
 from ..services.paper_search import ArxivSearcher, SemanticScholarSearcher
 from ..services.paper_fetcher import PaperFetcher
 from ..services.web_searcher import WebSearcher
-from ..tools import ToolRegistry
+from ..tools.tool import ToolRegistry
 from ..tools.search_tools import build_arxiv_search_tool, build_s2_search_tool
 from ..tools.paper_tools import build_fetch_fulltext_tool, build_analyze_paper_tool
 from ..tools.memory_tools import (

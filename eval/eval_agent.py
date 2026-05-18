@@ -156,7 +156,9 @@ def print_metrics(metrics: Dict):
 
 
 if __name__ == "__main__":
+    from dotenv import load_dotenv
     root = Path(__file__).parent.parent
+    load_dotenv(root / ".env")
     settings = Settings.from_env(root)
 
     topic = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "DPO 在测试用例生成中的应用"

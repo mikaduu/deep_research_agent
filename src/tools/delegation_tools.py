@@ -3,10 +3,10 @@
 
 Worker 内部也是 autonomous loop（能自主验证引用、搜索补充材料），
 但对 Manager 来说只是一次 tool call — 委派出去等结果回来。
+
+注意：使用延迟导入避免循环依赖（tools → agents → tools）。
 """
 
-from ..agents.critic_worker import CriticWorker
-from ..agents.reviser_worker import ReviserWorker
 from ..core.config import Settings
 from ..core.models import CriticReview
 from .tool import Tool, ToolResult
@@ -15,6 +15,8 @@ from .tool import Tool, ToolResult
 def build_delegate_to_critic_tool(settings: Settings) -> Tool:
     """每次调用都新建 CriticWorker（独立 LLM 实例，角色隔离）。"""
     def run(args):
+        from ..agents.critic_worker import CriticWorker  # 延迟导入避免循环
+
         topic = (args.get("topic") or "").strip()
         report_md = (args.get("report_md") or "").strip()
         if not topic or not report_md:
@@ -64,6 +66,8 @@ def build_delegate_to_critic_tool(settings: Settings) -> Tool:
 def build_delegate_to_reviser_tool(settings: Settings) -> Tool:
     """每次调用都新建 ReviserWorker（独立 LLM 实例）。"""
     def run(args):
+        from ..agents.reviser_worker import ReviserWorker  # 延迟导入避免循环
+
         topic = (args.get("topic") or "").strip()
         report_md = (args.get("report_md") or "").strip()
         review_data = args.get("review") or {}

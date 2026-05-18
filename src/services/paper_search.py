@@ -46,8 +46,12 @@ class ArxivSearcher:
                 ))
             return papers
         except Exception as e:
-            # arXiv 429/网络问题/解析错误 → 降级为空列表，不影响整体流程
-            print(f"[ArxivSearcher] search failed ({type(e).__name__}): {str(e)[:120]}")
+            err_str = str(e)[:200]
+            is_rate_limit = "429" in err_str or "503" in err_str
+            print(f"[ArxivSearcher] search failed ({type(e).__name__}): {err_str[:120]}")
+            if is_rate_limit:
+                # 抛出特定异常让 tool 层能告知 Agent "arxiv 被限流"
+                raise RuntimeError(f"arXiv rate-limited (429/503). Try semantic_scholar or web_search instead.") from e
             return []
 
 

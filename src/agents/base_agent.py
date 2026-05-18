@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from ..core.llm import LLMClient
-from ..tools import Tool, ToolRegistry, ToolResult
+from ..tools.tool import Tool, ToolRegistry, ToolResult
 
 
 @dataclass
@@ -153,11 +153,17 @@ class BaseAgent(ABC):
 
             # 2. 提取工具调用（function calling）
             tool_calls = getattr(msg, "tool_calls", None) or []
+            # 兼容 thinking 模式（MiMo / DeepSeek-R1）：保留 reasoning_content
+            reasoning = getattr(msg, "reasoning_content", None) or ""
+
             if not tool_calls:
                 # LLM 没调工具但给了文本 —— 要求它继续决策
                 content = (msg.content or "").strip()
                 step.thought = content
-                messages.append({"role": "assistant", "content": content})
+                assistant_msg = {"role": "assistant", "content": content}
+                if reasoning:
+                    assistant_msg["reasoning_content"] = reasoning
+                messages.append(assistant_msg)
                 messages.append({
                     "role": "user",
                     "content": "你必须通过 function calling 调用一个工具。没有其它方式推进。如需结束请调用 finish。",
@@ -179,7 +185,8 @@ class BaseAgent(ABC):
             step.tool_args = fn_args
 
             # 把 assistant 的 tool_call 加回 history（符合 OpenAI 协议）
-            messages.append({
+            # 兼容 thinking 模式：带上 reasoning_content
+            assistant_msg = {
                 "role": "assistant",
                 "content": msg.content or "",
                 "tool_calls": [{
@@ -190,7 +197,10 @@ class BaseAgent(ABC):
                         "arguments": tool_call.function.arguments or "{}",
                     },
                 }],
-            })
+            }
+            if reasoning:
+                assistant_msg["reasoning_content"] = reasoning
+            messages.append(assistant_msg)
 
             # finish 工具特殊处理
             if fn_name == self.FINISH_TOOL_NAME:

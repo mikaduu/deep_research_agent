@@ -180,7 +180,9 @@ def get_memory_stats(settings: Settings) -> Dict:
 
 
 if __name__ == "__main__":
+    from dotenv import load_dotenv
     root = Path(__file__).parent.parent
+    load_dotenv(root / ".env")
     settings = Settings.from_env(root)
 
     print("=" * 60)

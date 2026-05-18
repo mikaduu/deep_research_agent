@@ -13,7 +13,7 @@ from ..core.config import Settings
 from ..core.models import CriticReview
 from ..agents.base_agent import BaseAgent
 from ..services.paper_search import ArxivSearcher, SemanticScholarSearcher
-from ..tools import Tool, ToolRegistry, ToolResult
+from ..tools.tool import Tool, ToolRegistry, ToolResult
 from ..tools.search_tools import build_arxiv_search_tool, build_s2_search_tool
 
 

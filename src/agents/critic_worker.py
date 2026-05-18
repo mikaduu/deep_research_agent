@@ -16,7 +16,7 @@ from ..core.llm import LLMClient
 from ..core.models import CriticReview
 from ..core.utils import extract_json_object
 from ..agents.base_agent import BaseAgent
-from ..tools import Tool, ToolRegistry, ToolResult
+from ..tools.tool import Tool, ToolRegistry, ToolResult
 
 import requests
 

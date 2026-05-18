@@ -173,7 +173,9 @@ def print_eval(metrics: Dict):
 
 
 if __name__ == "__main__":
+    from dotenv import load_dotenv
     root = Path(__file__).parent.parent
+    load_dotenv(root / ".env")
     settings = Settings.from_env(root)
 
     arxiv_id = sys.argv[1] if len(sys.argv) > 1 else "2305.18290"

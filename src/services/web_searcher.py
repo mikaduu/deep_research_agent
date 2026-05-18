@@ -28,7 +28,11 @@ class WebSearcher:
         if not query.strip():
             return []
         try:
-            from duckduckgo_search import DDGS
+            # 兼容新旧包名（duckduckgo_search 已改名为 ddgs）
+            try:
+                from ddgs import DDGS
+            except ImportError:
+                from duckduckgo_search import DDGS
             with DDGS() as ddgs:
                 results = list(ddgs.text(query, max_results=max_results))
             return [
