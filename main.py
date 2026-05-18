@@ -148,6 +148,17 @@ def research(
             report = output.get("output", str(output))
         else:
             report = str(output)
+
+        # 保存报告到 workspace/reports/
+        from datetime import datetime
+        reports_dir = settings.workspace_dir / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_topic = "".join(c if c.isalnum() or c in " -_" else "" for c in topic)[:40].strip()
+        report_path = reports_dir / f"{timestamp}_{safe_topic}.md"
+        report_path.write_text(report, encoding="utf-8")
+
+        console.print(f"[green]报告已保存至: {report_path}[/green]")
         console.print(Panel(report[:3000], title="最终报告（前 3000 字）", border_style="green"))
     else:
         console.print(f"[yellow]研究未完成[/yellow] (原因: {result.finish_reason})")

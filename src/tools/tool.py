@@ -31,7 +31,7 @@ class ToolResult:
     error: str = ""
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def to_llm_string(self, max_chars: int = 4000) -> str:
+    def to_llm_string(self, max_chars: int = 2000) -> str:
         """转换为能回灌给 LLM 的字符串，过大会被截断。"""
         if not self.success:
             return f"[Tool failed] {self.error}"

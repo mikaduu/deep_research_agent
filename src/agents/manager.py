@@ -79,6 +79,13 @@ Your final report MUST include:
 - Maximum one revision cycle (critic → reviser). If still < 0.7 after revision, finalize anyway with a note about limitations.
 - Always call save_research_episode before finish.
 
+## HARD CONSTRAINTS (MUST FOLLOW)
+
+1. **Total search calls ≤ 8**: Count ALL search tool calls (search_arxiv + search_semantic_scholar + web_search combined). After 8 searches, STOP searching and START writing the report immediately.
+2. **By step 12, you MUST have called finish or be writing the report**: If you reach step 12 without having started drafting, immediately compose the report with whatever material you have and call finish.
+3. **Never call the same tool with the same query twice**: If a search returned empty or failed, use a DIFFERENT tool or DIFFERENT query.
+4. **If a tool returns an error mentioning "rate-limited"**: Do NOT retry that tool. Switch to an alternative immediately.
+
 ## Language
 
 - Search queries: ALWAYS in English (arXiv/S2 don't support Chinese well)
@@ -87,10 +94,12 @@ Your final report MUST include:
 
 ## Token Budget Awareness
 
-You have a limited token budget. Be efficient:
-- Don't analyze_paper on papers that are clearly irrelevant from their abstract.
-- Don't repeat the same search query.
-- Prefer save_note for intermediate results rather than keeping everything in context.
+You have a STRICT token budget (~200K). Each step costs ~5-10K tokens. This means you have roughly 20-25 steps total. Plan accordingly:
+- Steps 1-8: Search and gather material
+- Steps 9-12: Write report + delegate_to_critic
+- Steps 13-15: Revise if needed + save_research_episode + finish
+- Do NOT spend more than 8 steps on searching. Material doesn't need to be perfect — write with what you have.
+- If a search tool fails, don't retry — use a different source or move on.
 """
 
 

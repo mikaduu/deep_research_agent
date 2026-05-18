@@ -1,0 +1,63 @@
+{
+  "topic": "DPO 在测试用例生成中的应用",
+  "execution": {
+    "finished": true,
+    "finish_reason": "finished",
+    "total_steps": 22,
+    "total_tokens": 143278,
+    "wall_time_seconds": 518.0,
+    "tokens_per_step": 6513,
+    "avg_step_latency_ms": 23546
+  },
+  "tool_usage": {
+    "distribution": {
+      "retrieve_memory": 1,
+      "search_arxiv": 2,
+      "search_semantic_scholar": 6,
+      "web_search": 4,
+      "web_fetch": 6,
+      "save_note": 1,
+      "save_research_episode": 1,
+      "finish": 1
+    },
+    "tokens_by_tool": {
+      "retrieve_memory": 3452,
+      "search_arxiv": 9150,
+      "search_semantic_scholar": 28015,
+      "web_search": 20718,
+      "web_fetch": 43417,
+      "save_note": 9781,
+      "save_research_episode": 13738,
+      "finish": 15007
+    },
+    "success_count": {
+      "retrieve_memory": 1,
+      "search_semantic_scholar": 6,
+      "web_search": 4,
+      "web_fetch": 6,
+      "save_note": 1,
+      "save_research_episode": 1,
+      "finish": 1
+    },
+    "fail_count": {
+      "search_arxiv": 2
+    },
+    "unique_tools_used": 8,
+    "total_tool_calls": 22,
+    "success_rate": 0.909
+  },
+  "report_quality": {
+    "report_length_chars": 1791,
+    "report_length_words": 260,
+    "critic_reviews": [],
+    "final_critic_score": null,
+    "dimension_scores": null
+  },
+  "learning": {
+    "memory_stats_after": {
+      "episodes": 2,
+      "skills": 5,
+      "vectors": 15
+    }
+  }
+}

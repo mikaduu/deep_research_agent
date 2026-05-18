@@ -125,6 +125,23 @@ class BaseAgent(ABC):
                     total_elapsed_ms=int((time.time() - total_start) * 1000),
                 )
 
+            # 中途收敛提醒：步数过 60% 或 token 过 70% 时注入提示
+            budget_pct = total_tokens / self.max_total_tokens if self.max_total_tokens > 0 else 0
+            step_pct = step_idx / self.max_steps if self.max_steps > 0 else 0
+            if (budget_pct > 0.7 or step_pct > 0.6) and step_idx > 0:
+                # 只提醒一次（检查最后一条 user 消息是否已经是提醒）
+                last_user_msgs = [m for m in messages if m["role"] == "user"]
+                if last_user_msgs and "BUDGET WARNING" not in last_user_msgs[-1].get("content", ""):
+                    messages.append({
+                        "role": "user",
+                        "content": (
+                            "[BUDGET WARNING] You have used "
+                            f"{budget_pct:.0%} of token budget and {step_pct:.0%} of max steps. "
+                            "STOP searching and START writing your final report NOW. "
+                            "Call finish with your report, or delegate_to_critic if you have a draft."
+                        ),
+                    })
+
             step_start = time.time()
             step = AgentStep(step_idx=step_idx)
 
