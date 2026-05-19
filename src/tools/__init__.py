@@ -1,22 +1,15 @@
-"""src.tools — 工具抽象 + 注册表 + 各类具体工具 builder"""
+"""
+LangGraph 版工具定义
 
-from .tool import Tool, ToolRegistry, ToolResult
-from .search_tools import build_arxiv_search_tool, build_s2_search_tool
-from .paper_tools import build_fetch_fulltext_tool, build_analyze_paper_tool
-from .memory_tools import (
-    build_retrieve_memory_tool,
-    build_save_note_tool,
-    build_save_research_episode_tool,
-)
-from .delegation_tools import build_delegate_to_critic_tool, build_delegate_to_reviser_tool
-from .web_tools import build_web_search_tool, build_web_fetch_tool
+使用 langchain_core 的 @tool 装饰器，替代手搓的 Tool/ToolRegistry/builder 模式。
+LangGraph 会自动从函数签名和 docstring 生成 JSON Schema。
 
-__all__ = [
-    "Tool", "ToolRegistry", "ToolResult",
-    "build_arxiv_search_tool", "build_s2_search_tool",
-    "build_fetch_fulltext_tool", "build_analyze_paper_tool",
-    "build_retrieve_memory_tool", "build_save_note_tool",
-    "build_save_research_episode_tool",
-    "build_delegate_to_critic_tool", "build_delegate_to_reviser_tool",
-    "build_web_search_tool", "build_web_fetch_tool",
-]
+工具分组：
+- 搜索：search_arxiv / search_semantic_scholar / web_search / web_fetch
+- 论文：fetch_paper_fulltext / analyze_paper
+- 记忆：retrieve_memory / save_note / save_research_episode
+- 委派：delegate_to_critic / delegate_to_reviser
+"""
+
+from langchain_core.tools import tool
+from typing import Optional

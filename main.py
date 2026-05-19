@@ -106,18 +106,13 @@ def analyze(url: str = typer.Argument(..., help="论文arXiv ID或URL"),
 @app.command()
 def research(
     topic: str = typer.Argument(..., help="研究主题"),
-    max_steps: int = typer.Option(30, "--max-steps", "-s", help="最大决策步数"),
-    max_tokens: int = typer.Option(200000, "--max-tokens", "-t", help="总 token 上限"),
     legacy: bool = typer.Option(False, "--legacy", help="使用老的编排式流程（降级）"),
 ):
-    """对主题进行深度研究并生成报告（默认自主模式）"""
-    from src.agents.manager import ResearchManager
-
+    """对主题进行深度研究并生成报告（LangGraph 自主模式）"""
     root = Path(__file__).parent
     settings = Settings.from_env(root)
 
     if legacy:
-        # 降级：走老的编排式 Orchestrator
         console.print(Panel(f"[bold]深度研究 (编排模式):[/bold] {topic}", style="yellow"))
         orch = get_orchestrator()
         with console.status("研究中，请稍候..."):
@@ -127,29 +122,22 @@ def research(
         console.print(f"[dim]记忆库: {stats['episodes']} 情节 | {stats['skills']} 技能 | {stats['vectors']} 向量[/dim]")
         return
 
-    # 默认：自主模式
+    # 默认：LangGraph 自主模式
+    from src.agents.research_graph import run_research
+
     console.print(Panel(
-        f"[bold cyan]自主研究模式[/bold cyan]\n"
-        f"主题: {topic}\n"
-        f"预算: {max_steps} 步 / {max_tokens:,} tokens",
+        f"[bold cyan]自主研究模式 (LangGraph)[/bold cyan]\n"
+        f"主题: {topic}",
         border_style="cyan",
     ))
-
-    manager = ResearchManager(settings, max_steps=max_steps, max_total_tokens=max_tokens)
     console.print("[dim]Agent 开始自主研究...[/dim]\n")
-    result = manager.run(topic)
 
-    # 结果展示
+    result = run_research(settings, topic)
+    report = result["report"]
+
+    # 保存报告
     console.print(f"\n{'─' * 60}")
-    if result.finished:
-        console.print(f"[green]研究完成[/green] ({result.finish_reason})")
-        output = result.final_output
-        if isinstance(output, dict):
-            report = output.get("output", str(output))
-        else:
-            report = str(output)
-
-        # 保存报告到 workspace/reports/
+    if report:
         from datetime import datetime
         reports_dir = settings.workspace_dir / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
@@ -158,24 +146,17 @@ def research(
         report_path = reports_dir / f"{timestamp}_{safe_topic}.md"
         report_path.write_text(report, encoding="utf-8")
 
-        console.print(f"[green]报告已保存至: {report_path}[/green]")
+        console.print(f"[green]研究完成！报告已保存至: {report_path}[/green]")
         console.print(Panel(report[:3000], title="最终报告（前 3000 字）", border_style="green"))
     else:
-        console.print(f"[yellow]研究未完成[/yellow] (原因: {result.finish_reason})")
-        if result.steps:
-            last = result.steps[-1]
-            console.print(f"[dim]最后一步: {last.tool_name} → {last.tool_result.error if last.tool_result and not last.tool_result.success else 'ok'}[/dim]")
+        console.print("[yellow]研究未产出报告[/yellow]")
 
     # 统计
-    console.print(f"\n[dim]总步数: {len(result.steps)} | 总 tokens: {result.total_tokens:,} | 耗时: {result.total_elapsed_ms/1000:.1f}s[/dim]")
-
-    # 执行轨迹
-    if result.steps:
-        console.print("\n[bold]执行轨迹:[/bold]")
-        for s in result.steps:
-            status = "✓" if (s.tool_result and s.tool_result.success) else "✗"
-            name = s.tool_name or "(thinking)"
-            console.print(f"  {s.step_idx+1}. [{status}] {name}  ({s.tokens_used} tok, {s.elapsed_ms}ms)")
+    stats = result["memory_stats"]
+    console.print(
+        f"\n[dim]总消息数: {result['total_messages']} | "
+        f"记忆库: {stats['episodes']} 情节 | {stats['skills']} 技能 | {stats['vectors']} 向量[/dim]"
+    )
 
 
 @app.command()

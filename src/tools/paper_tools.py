@@ -1,134 +1,80 @@
 """
-论文阅读/分析工具：
-  - fetch_paper_fulltext  : 下载 PDF 并提取结构化文本
-  - analyze_paper         : 深度分析（贡献/方法/局限/数据集）
+论文工具（LangGraph 版）
 """
 
 from typing import Optional
+from langchain_core.tools import tool
 
-from ..agents.paper_analyzer import PaperAnalyzer
-from ..services.paper_fetcher import PaperFetcher
-from ..services.paper_search import ArxivSearcher
-from .tool import Tool, ToolResult
+_fetcher = None
+_analyzer = None
+_arxiv_searcher = None
+_memory = None
 
 
-def build_fetch_fulltext_tool(fetcher: PaperFetcher) -> Tool:
-    def run(args):
-        arxiv_id = (args.get("arxiv_id") or "").strip()
-        if not arxiv_id:
-            return ToolResult(success=False, error="arxiv_id is required")
+def init_paper_tools(fetcher, analyzer, arxiv_searcher, memory=None):
+    global _fetcher, _analyzer, _arxiv_searcher, _memory
+    _fetcher = fetcher
+    _analyzer = analyzer
+    _arxiv_searcher = arxiv_searcher
+    _memory = memory
 
-        ft = fetcher.fetch_fulltext(arxiv_id)
-        if ft is None:
-            return ToolResult(
-                success=False,
-                error=f"Unable to fetch or parse PDF for {arxiv_id}",
+
+@tool
+def fetch_paper_fulltext(arxiv_id: str) -> str:
+    """Download an arXiv paper PDF and extract its sections (abstract, introduction,
+    method, experiments, conclusion). Use when abstract alone is insufficient.
+    Section text is truncated to 1500 chars each."""
+    if not arxiv_id.strip():
+        return "[Error] arxiv_id is required"
+    ft = _fetcher.fetch_fulltext(arxiv_id.strip())
+    if ft is None:
+        return f"[Error] Unable to fetch or parse PDF for {arxiv_id}"
+    sections_preview = {
+        k: (v[:1500] + "..." if len(v) > 1500 else v)
+        for k, v in ft.sections.items()
+    }
+    result = f"Paper: {arxiv_id} ({ft.num_pages} pages, {ft.num_chars} chars)\n\n"
+    for section, text in sections_preview.items():
+        result += f"## {section}\n{text}\n\n"
+    return result[:5000]  # 防止过长
+
+
+@tool
+def analyze_paper(arxiv_id: str, focus: Optional[str] = None) -> str:
+    """Deeply analyze one paper (downloads full text, does section-level map-reduce).
+    Produces structured note with formulas, tables, critical view.
+    Also saves note to workspace/paper_notes/ and indexes in vector store.
+    Use sparingly on the 2-3 most important papers. Slower but much richer."""
+    if not arxiv_id.strip():
+        return "[Error] arxiv_id is required"
+    metas = _arxiv_searcher.search(f"id:{arxiv_id.strip()}", max_results=1)
+    if not metas:
+        return f"[Error] Paper metadata not found for {arxiv_id}"
+
+    result = _analyzer.analyze(metas[0], focus=focus, use_fulltext=True)
+
+    # 写入 vector store
+    if _memory is not None:
+        tldr = result.get("tldr", "")
+        contributions = "\n".join(f"- {c}" for c in result.get("contributions", []))
+        try:
+            _memory.vector.add(
+                doc_id=f"paper:{arxiv_id.strip()}",
+                content=f"{metas[0].title}\n{tldr}\n\nContributions:\n{contributions}",
+                metadata={"type": "paper_note", "arxiv_id": arxiv_id.strip(),
+                          "method_name": result.get("_method_name", arxiv_id)},
             )
+        except Exception:
+            pass
 
-        sections_preview = {
-            k: (v[:1500] + ("..." if len(v) > 1500 else ""))
-            for k, v in ft.sections.items()
-        }
-        return ToolResult(
-            success=True,
-            content={
-                "arxiv_id": ft.arxiv_id,
-                "num_pages": ft.num_pages,
-                "num_chars": ft.num_chars,
-                "sections": sections_preview,
-            },
-        )
-
-    return Tool(
-        name="fetch_paper_fulltext",
-        description=(
-            "Download an arXiv paper PDF and extract its sections (abstract, introduction, "
-            "method, experiments, conclusion). Section text is truncated to 1500 chars each. "
-            "Use when abstract alone is insufficient to judge a paper's contribution."
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "arxiv_id": {
-                    "type": "string",
-                    "description": "The arXiv id such as '2301.00234' (with or without version).",
-                },
-            },
-            "required": ["arxiv_id"],
-        },
-        run=run,
-    )
-
-
-def build_analyze_paper_tool(
-    analyzer: PaperAnalyzer,
-    arxiv_searcher: ArxivSearcher,
-    memory=None,
-) -> Tool:
-    """
-    需要传入 arxiv_searcher 和可选的 memory（MemoryManager）。
-    如果传了 memory，分析完后会把摘要写入 vector store（paper:{arxiv_id} 前缀）。
-    """
-    def run(args):
-        arxiv_id = (args.get("arxiv_id") or "").strip()
-        focus: Optional[str] = args.get("focus") or None
-        if not arxiv_id:
-            return ToolResult(success=False, error="arxiv_id is required")
-
-        metas = arxiv_searcher.search(f"id:{arxiv_id}", max_results=1)
-        if not metas:
-            return ToolResult(
-                success=False,
-                error=f"Paper metadata not found for {arxiv_id}",
-            )
-
-        result = analyzer.analyze(metas[0], focus=focus, use_fulltext=True)
-
-        # 写入 vector store（paper:* namespace）
-        if memory is not None:
-            tldr = result.get("tldr", "")
-            contributions = "\n".join(f"- {c}" for c in result.get("contributions", []))
-            summary_text = f"{metas[0].title}\n{tldr}\n\nContributions:\n{contributions}"
-            try:
-                memory.vector.add(
-                    doc_id=f"paper:{arxiv_id}",
-                    content=summary_text,
-                    metadata={
-                        "type": "paper_note",
-                        "arxiv_id": arxiv_id,
-                        "method_name": result.get("_method_name", arxiv_id),
-                        "path": result.get("_note_path", ""),
-                        "tags": ",".join(result.get("tags", [])),
-                    },
-                )
-            except Exception:
-                pass  # 写入失败不影响主流程
-
-        return ToolResult(success=True, content=result)
-
-    return Tool(
-        name="analyze_paper",
-        description=(
-            "Deeply analyze one paper (downloads full text, does section-level map-reduce). "
-            "Produces a structured note following paper-reader quality standards: "
-            "TL;DR, contributions, method with [[Concept]] links, formulas with symbol legends, "
-            "datasets, results with numbers, critical view, reproducibility checklist. "
-            "Also saves the note to workspace/paper_notes/ and indexes it in vector store. "
-            "Use sparingly on the 2-3 most important papers."
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "arxiv_id": {
-                    "type": "string",
-                    "description": "arXiv id such as '2301.00234'",
-                },
-                "focus": {
-                    "type": "string",
-                    "description": "Optional focus area, e.g. 'methodology' or 'experiments'",
-                },
-            },
-            "required": ["arxiv_id"],
-        },
-        run=run,
-    )
+    # 返回摘要给 Agent
+    summary = f"**{metas[0].title}**\n\n"
+    summary += f"TL;DR: {result.get('tldr', 'N/A')}\n\n"
+    summary += f"Problem: {result.get('problem', 'N/A')}\n\n"
+    if result.get("contributions"):
+        summary += "Contributions:\n" + "\n".join(f"- {c}" for c in result["contributions"]) + "\n\n"
+    if result.get("results"):
+        summary += f"Results: {result['results']}\n\n"
+    if result.get("_note_path"):
+        summary += f"[Note saved: {result['_note_path']}]"
+    return summary[:3000]

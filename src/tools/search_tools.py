@@ -1,98 +1,52 @@
 """
-搜索相关工具：arXiv、Semantic Scholar、web（web_search 留作 TODO）
+搜索工具（LangGraph 版）
 
-所有工具遵循统一接口：run(args: dict) -> ToolResult
+用 @tool 装饰器定义，LangGraph 自动生成 schema。
+工具函数接受的是具体参数（不是 dict），类型安全。
 """
 
 from typing import List
-
-from ..services.paper_search import ArxivSearcher, SemanticScholarSearcher
-from .tool import Tool, ToolResult
+from langchain_core.tools import tool
 
 
-def _papers_to_dicts(papers: List) -> List[dict]:
-    """把 PaperItem 列表序列化为易读 dict，控制 abstract 长度。"""
-    return [
-        {
-            "paper_id": p.paper_id,
-            "title": p.title,
-            "authors": p.authors[:3],
-            "abstract": (p.abstract or "")[:400],
-            "url": p.url,
-            "published": p.published,
-        }
-        for p in papers
-    ]
+# 全局实例（由 create_tools 时注入）
+_arxiv_searcher = None
+_s2_searcher = None
 
 
-def build_arxiv_search_tool(searcher: ArxivSearcher) -> Tool:
-    def run(args):
-        query = (args.get("query") or "").strip()
-        max_results = int(args.get("max_results", 5))
-        if not query:
-            return ToolResult(success=False, error="query is required")
-        papers = searcher.search(query, max_results=max_results)
-        return ToolResult(
-            success=True,
-            content={"count": len(papers), "papers": _papers_to_dicts(papers)},
-            metadata={"source": "arxiv"},
-        )
-
-    return Tool(
-        name="search_arxiv",
-        description=(
-            "Search arXiv for academic papers. Returns paper_id, title, authors, "
-            "abstract (first 400 chars), and URL. Best for established research."
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "English keyword query, 3-8 words. NO full sentences, NO Chinese.",
-                },
-                "max_results": {
-                    "type": "integer",
-                    "description": "Max papers to return (default 5, recommend 3-8)",
-                    "default": 5,
-                },
-            },
-            "required": ["query"],
-        },
-        run=run,
-    )
+def init_search_tools(arxiv_searcher, s2_searcher):
+    """初始化搜索工具依赖的 service 实例。"""
+    global _arxiv_searcher, _s2_searcher
+    _arxiv_searcher = arxiv_searcher
+    _s2_searcher = s2_searcher
 
 
-def build_s2_search_tool(searcher: SemanticScholarSearcher) -> Tool:
-    def run(args):
-        query = (args.get("query") or "").strip()
-        max_results = int(args.get("max_results", 5))
-        if not query:
-            return ToolResult(success=False, error="query is required")
-        papers = searcher.search(query, max_results=max_results)
-        return ToolResult(
-            success=True,
-            content={"count": len(papers), "papers": _papers_to_dicts(papers)},
-            metadata={"source": "semantic_scholar"},
-        )
+@tool
+def search_arxiv(query: str, max_results: int = 5) -> str:
+    """Search arXiv for academic papers. Use short English keyword queries (3-8 words).
+    Returns paper titles, authors, abstracts and URLs.
+    If rate-limited, switch to search_semantic_scholar instead."""
+    if not query.strip():
+        return "[Error] query is required"
+    papers = _arxiv_searcher.search(query, max_results=max_results)
+    if not papers:
+        return f"[No results] arXiv returned 0 papers for '{query}'. Try a different query or use search_semantic_scholar."
+    lines = []
+    for p in papers[:max_results]:
+        lines.append(f"- **{p.title}**\n  Authors: {', '.join(p.authors[:3])}\n  Abstract: {(p.abstract or '')[:300]}\n  URL: {p.url}\n  ID: {p.paper_id}")
+    return f"Found {len(papers)} papers:\n\n" + "\n\n".join(lines)
 
-    return Tool(
-        name="search_semantic_scholar",
-        description=(
-            "Search Semantic Scholar for academic papers. Broader coverage than arXiv "
-            "(includes journals, workshops). Use as a second opinion or when arXiv "
-            "gives too few results."
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "English keyword query, 3-8 words.",
-                },
-                "max_results": {"type": "integer", "default": 5},
-            },
-            "required": ["query"],
-        },
-        run=run,
-    )
+
+@tool
+def search_semantic_scholar(query: str, max_results: int = 5) -> str:
+    """Search Semantic Scholar for academic papers. Broader coverage than arXiv.
+    Use as primary search when arXiv is rate-limited, or as a second opinion."""
+    if not query.strip():
+        return "[Error] query is required"
+    papers = _s2_searcher.search(query, max_results=max_results)
+    if not papers:
+        return f"[No results] Semantic Scholar returned 0 papers for '{query}'."
+    lines = []
+    for p in papers[:max_results]:
+        lines.append(f"- **{p.title}**\n  Authors: {', '.join(p.authors[:3])}\n  Abstract: {(p.abstract or '')[:300]}\n  URL: {p.url}")
+    return f"Found {len(papers)} papers:\n\n" + "\n\n".join(lines)
