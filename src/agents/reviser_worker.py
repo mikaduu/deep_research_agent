@@ -66,7 +66,7 @@ class ReviserState(TypedDict):
 class ReviserWorker:
     """LangGraph 版自主修订 Agent。"""
 
-    def __init__(self, settings: Settings, max_steps: int = 10):
+    def __init__(self, settings: Settings, max_steps: int = 15):
         self._settings = settings
         self._max_steps = max_steps
 
@@ -98,11 +98,9 @@ class ReviserWorker:
         config = {"recursion_limit": self._max_steps * 2}
         result = graph.invoke({"messages": initial_messages}, config=config)
 
-        # 提取最后一条 AI 文本消息作为修订报告
+        # 提取最后一条有内容的 AIMessage（排除空内容和有 tool_calls 的）
         for msg in reversed(result["messages"]):
-            if isinstance(msg, AIMessage) and msg.content and not hasattr(msg, "tool_calls"):
-                return msg.content
-            if hasattr(msg, "content") and msg.content and not hasattr(msg, "tool_calls"):
+            if isinstance(msg, AIMessage) and msg.content and not msg.tool_calls:
                 return msg.content
 
         return report_md  # fallback：返回原报告

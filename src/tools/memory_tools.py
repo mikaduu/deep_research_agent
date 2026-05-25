@@ -48,6 +48,7 @@ def save_note(doc_id: str, title: str, body: str) -> str:
 def save_research_episode(topic: str, final_report: str, quality_hint: float = 0.6) -> str:
     """Save a completed research session and trigger self-learning (extract insights + skills).
     Call this ONCE at the very end, right before finishing.
+    final_report: MUST be the COMPLETE research report (5000+ chars), NOT a summary.
     quality_hint: your self-assessed quality 0-1."""
     if not topic or not final_report:
         return "[Error] topic and final_report are required"

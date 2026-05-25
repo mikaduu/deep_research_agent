@@ -317,8 +317,9 @@ Return JSON (same schema as fulltext analysis but with empty arrays for fields n
         content = frontmatter + body
         path.write_text(content, encoding="utf-8")
 
-        # 概念库联动：扫描笔记中的 [[Concept]] 链接，创建缺失的 stub
-        new_concepts = self.concept_library.scan_and_create(content, paper_method_name=method_name)
+        # 概念库联动已禁用（会产生大量占位文件）
+        # new_concepts = self.concept_library.scan_and_create(content, paper_method_name=method_name)
+        new_concepts = []
         analysis["_note_path"] = str(path)
         analysis["_method_name"] = method_name
         analysis["_new_concepts"] = new_concepts

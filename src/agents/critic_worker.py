@@ -67,7 +67,7 @@ class CriticState(TypedDict):
 class CriticWorker:
     """LangGraph 版自主评审 Agent。"""
 
-    def __init__(self, settings: Settings, max_steps: int = 8):
+    def __init__(self, settings: Settings, max_steps: int = 15):
         self._settings = settings
         self._max_steps = max_steps
 

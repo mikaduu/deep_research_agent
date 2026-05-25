@@ -11,14 +11,15 @@ class ArxivSearcher:
     arXiv搜索器，含有限制和容错：
     - query 超长自动截断到 200 字符
     - HTTP 429/其他异常返回空列表而非抛出
-    - num_retries 由 arxiv.Client 内部处理，这里再加一层保护
+    - 请求间隔 ≥3 秒，避免触发 arXiv 限流
     """
     MAX_QUERY_LEN = 200
+    MIN_INTERVAL = 3.0  # 两次请求之间最少间隔秒数
 
     def __init__(self, max_results: int = 10):
         self.max_results = max_results
-        # page_size=小一些，num_retries 多一点，delay 适当拉长避免 429
         self.client = arxiv.Client(page_size=10, delay_seconds=3.0, num_retries=3)
+        self._last_request_time = 0.0
 
     def search(self, query: str, max_results: Optional[int] = None) -> List[PaperItem]:
         limit = max_results or self.max_results
@@ -26,7 +27,13 @@ class ArxivSearcher:
         if not safe_query:
             return []
 
+        # 请求间隔限速
+        elapsed = time.time() - self._last_request_time
+        if elapsed < self.MIN_INTERVAL:
+            time.sleep(self.MIN_INTERVAL - elapsed)
+
         try:
+            self._last_request_time = time.time()
             search = arxiv.Search(
                 query=safe_query,
                 max_results=limit,
@@ -50,7 +57,6 @@ class ArxivSearcher:
             is_rate_limit = "429" in err_str or "503" in err_str
             print(f"[ArxivSearcher] search failed ({type(e).__name__}): {err_str[:120]}")
             if is_rate_limit:
-                # 抛出特定异常让 tool 层能告知 Agent "arxiv 被限流"
                 raise RuntimeError(f"arXiv rate-limited (429/503). Try semantic_scholar or web_search instead.") from e
             return []
 

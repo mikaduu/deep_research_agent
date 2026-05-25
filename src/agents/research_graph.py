@@ -95,6 +95,13 @@ You autonomously conduct deep academic research on a given topic. You have a too
 4. **If a tool returns "rate-limited": switch to an alternative immediately.**
 5. **Report language: Chinese** (unless user specifies otherwise).
 6. **Search queries: ALWAYS English.**
+7. **Mandatory final sequence (MUST follow this exact order):**
+   - Step A: Output the complete draft report as a message (no tools).
+   - Step B: Call delegate_to_critic on the draft report.
+   - Step C: If critic score < 0.7, call delegate_to_reviser. Otherwise skip.
+   - Step D: Output the FINAL report as a message.
+   - Step E: Call save_research_episode ONCE.
+   - Step F: Done. Do NOT call any more tools after save_research_episode.
 
 ## Report Format
 Your final message (when you're done) should be the complete Markdown report including:
@@ -198,17 +205,67 @@ def run_research(settings: Settings, topic: str) -> Dict[str, Any]:
         HumanMessage(content=f"请对以下主题进行深度研究并生成完整报告：\n\n{topic}"),
     ]
 
-    # 执行 graph（设置递归上限防止无限循环）
-    config = {"recursion_limit": 60}  # agent↔tools 来回算 2 步，30 轮 = 60
-    result = graph.invoke({"messages": initial_messages}, config=config)
+    # 用 stream 模式逐步执行，实时打印进度
+    # stream_mode="updates" 每步返回增量 state
+    config = {"recursion_limit": 60}
+    step = 0
+    final_messages = []
+    reviser_report = None   # 捕获 Reviser 的修订报告
+    critic_report = None    # 捕获传给 Critic 的草稿报告（或 Agent 的长文本输出）
 
-    # 提取最终报告（最后一条 AI 消息）
-    final_messages = result["messages"]
-    report = ""
-    for msg in reversed(final_messages):
-        if hasattr(msg, "content") and msg.content and not hasattr(msg, "tool_calls"):
-            report = msg.content
-            break
+    for event in graph.stream({"messages": initial_messages}, config=config, stream_mode="updates"):
+        for node_name, node_output in event.items():
+            step += 1
+            msgs = node_output.get("messages", [])
+            if not msgs:
+                continue
+            last_msg = msgs[-1]
+
+            if node_name == "agent":
+                if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
+                    tool_names = [tc["name"] for tc in last_msg.tool_calls]
+                    print(f"  [{step}] Agent → 调用工具: {', '.join(tool_names)}")
+                    # 从 tool_call 参数中提取报告内容
+                    import json as _json
+                    for tc in last_msg.tool_calls:
+                        tc_name = tc.get("name", "")
+                        tc_args = tc.get("args", {})
+                        if tc_name == "delegate_to_critic":
+                            candidate = tc_args.get("report_md", "")
+                            if candidate and len(candidate) > 200:
+                                critic_report = candidate
+                else:
+                    content = getattr(last_msg, "content", "")
+                    # 长文本输出也可能是报告（只在比现有报告更长时覆盖）
+                    if content and len(content) > 500 and len(content) > len(critic_report or ""):
+                        critic_report = content
+                    preview = content[:80].replace("\n", " ") if content else "(empty)"
+                    print(f"  [{step}] Agent → 输出文本 ({len(content)} chars): {preview}...")
+
+            elif node_name == "tools":
+                for msg in msgs:
+                    if hasattr(msg, "name"):
+                        tool_name = msg.name
+                        content = getattr(msg, "content", "")
+                        if tool_name == "delegate_to_reviser" and content and len(content) > 500:
+                            reviser_report = content
+                        preview = content[:60].replace("\n", " ") if content else ""
+                        print(f"  [{step}] 工具 [{tool_name}] → {preview}...")
+
+            final_messages.extend(msgs)
+
+    # 报告优先级：Reviser 修订版 > Critic 草稿 > Agent 最后消息
+    from langchain_core.messages import AIMessage as _AIMessage
+    if reviser_report:
+        report = reviser_report
+    elif critic_report:
+        report = critic_report
+    else:
+        report = ""
+        for msg in reversed(final_messages):
+            if isinstance(msg, _AIMessage) and msg.content and not msg.tool_calls:
+                report = msg.content
+                break
 
     return {
         "report": report,

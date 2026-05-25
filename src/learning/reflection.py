@@ -90,9 +90,17 @@ class ReflectionEngine:
           - Critic 最终评分 * 0.4（若无 Critic 评审则回退为置信度）
           - 有引用 * 0.1
           - 有论文召回 * 0.1
+
+        LangGraph 模式下 task_results 为空，根据报告长度和 Critic 评分估算。
         """
         if not result.task_results:
-            return 0.0
+            report = result.final_report_markdown or ""
+            if not report:
+                return 0.0
+            # 根据报告长度给基础分（有内容就有分）
+            base = min(len(report) / 3000, 1.0) * 0.6
+            critic = result.critic_reviews[-1].score * 0.4 if result.critic_reviews else 0.0
+            return round(base + critic, 3)
         avg_conf = sum(t.confidence for t in result.task_results) / len(result.task_results)
 
         # Critic 权威分（取最后一轮评审）
