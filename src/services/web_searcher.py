@@ -7,10 +7,14 @@
 """
 
 import time
+import warnings
 from dataclasses import dataclass
 from typing import List, Optional
 
 import requests
+
+# 抑制 duckduckgo_search 改名警告
+warnings.filterwarnings("ignore", message=".*renamed to `ddgs`.*")
 
 
 @dataclass
