@@ -19,7 +19,10 @@ def web_search(query: str, max_results: int = 5) -> str:
     Use when academic search doesn't have enough info."""
     if not query.strip():
         return "[Error] query is required"
-    results = _web_searcher.search(query, max_results=max_results)
+    try:
+        results = _web_searcher.search(query, max_results=max_results)
+    except Exception as e:
+        return f"[Error] Web search failed: {str(e)[:200]}. Service may be unavailable."
     if not results:
         return f"[No results] Web search returned nothing for '{query}'. The search service may be unavailable."
     lines = [f"- **{r.title}**\n  URL: {r.url}\n  Snippet: {r.snippet}" for r in results]
@@ -32,7 +35,10 @@ def web_fetch(url: str, max_chars: int = 3000) -> str:
     Returns plain text with HTML tags stripped. Use after web_search to read a result in detail."""
     if not url.strip():
         return "[Error] url is required"
-    text = _web_searcher.fetch(url, max_chars=max_chars)
+    try:
+        text = _web_searcher.fetch(url, max_chars=max_chars)
+    except Exception as e:
+        return f"[Error] Failed to fetch {url}: {str(e)[:200]}"
     if text is None:
-        return f"[Error] Failed to fetch {url}"
+        return f"[Error] Failed to fetch {url} (returned empty)"
     return text

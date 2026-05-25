@@ -28,7 +28,10 @@ def search_arxiv(query: str, max_results: int = 5) -> str:
     If rate-limited, switch to search_semantic_scholar instead."""
     if not query.strip():
         return "[Error] query is required"
-    papers = _arxiv_searcher.search(query, max_results=max_results)
+    try:
+        papers = _arxiv_searcher.search(query, max_results=max_results)
+    except Exception as e:
+        return f"[Error] arXiv search failed: {str(e)[:200]}. Use search_semantic_scholar or web_search instead."
     if not papers:
         return f"[No results] arXiv returned 0 papers for '{query}'. Try a different query or use search_semantic_scholar."
     lines = []
@@ -43,7 +46,10 @@ def search_semantic_scholar(query: str, max_results: int = 5) -> str:
     Use as primary search when arXiv is rate-limited, or as a second opinion."""
     if not query.strip():
         return "[Error] query is required"
-    papers = _s2_searcher.search(query, max_results=max_results)
+    try:
+        papers = _s2_searcher.search(query, max_results=max_results)
+    except Exception as e:
+        return f"[Error] Semantic Scholar search failed: {str(e)[:200]}"
     if not papers:
         return f"[No results] Semantic Scholar returned 0 papers for '{query}'."
     lines = []

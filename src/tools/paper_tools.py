@@ -26,7 +26,10 @@ def fetch_paper_fulltext(arxiv_id: str) -> str:
     Section text is truncated to 1500 chars each."""
     if not arxiv_id.strip():
         return "[Error] arxiv_id is required"
-    ft = _fetcher.fetch_fulltext(arxiv_id.strip())
+    try:
+        ft = _fetcher.fetch_fulltext(arxiv_id.strip())
+    except Exception as e:
+        return f"[Error] Failed to fetch PDF for {arxiv_id}: {str(e)[:200]}"
     if ft is None:
         return f"[Error] Unable to fetch or parse PDF for {arxiv_id}"
     sections_preview = {
@@ -36,7 +39,7 @@ def fetch_paper_fulltext(arxiv_id: str) -> str:
     result = f"Paper: {arxiv_id} ({ft.num_pages} pages, {ft.num_chars} chars)\n\n"
     for section, text in sections_preview.items():
         result += f"## {section}\n{text}\n\n"
-    return result[:5000]  # 防止过长
+    return result[:5000]
 
 
 @tool
@@ -47,11 +50,17 @@ def analyze_paper(arxiv_id: str, focus: Optional[str] = None) -> str:
     Use sparingly on the 2-3 most important papers. Slower but much richer."""
     if not arxiv_id.strip():
         return "[Error] arxiv_id is required"
-    metas = _arxiv_searcher.search(f"id:{arxiv_id.strip()}", max_results=1)
+    try:
+        metas = _arxiv_searcher.search(f"id:{arxiv_id.strip()}", max_results=1)
+    except Exception as e:
+        return f"[Error] Cannot fetch paper metadata for {arxiv_id}: {str(e)[:200]}"
     if not metas:
         return f"[Error] Paper metadata not found for {arxiv_id}"
 
-    result = _analyzer.analyze(metas[0], focus=focus, use_fulltext=True)
+    try:
+        result = _analyzer.analyze(metas[0], focus=focus, use_fulltext=True)
+    except Exception as e:
+        return f"[Error] Analysis failed for {arxiv_id}: {str(e)[:200]}"
 
     # 写入 vector store
     if _memory is not None:
@@ -67,7 +76,7 @@ def analyze_paper(arxiv_id: str, focus: Optional[str] = None) -> str:
         except Exception:
             pass
 
-    # 返回摘要给 Agent
+    # 返回摘要
     summary = f"**{metas[0].title}**\n\n"
     summary += f"TL;DR: {result.get('tldr', 'N/A')}\n\n"
     summary += f"Problem: {result.get('problem', 'N/A')}\n\n"

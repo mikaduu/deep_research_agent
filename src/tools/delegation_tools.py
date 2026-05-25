@@ -26,8 +26,11 @@ def delegate_to_critic(topic: str, report_md: str) -> str:
     if not topic.strip() or not report_md.strip():
         return "[Error] topic and report_md are required"
 
-    critic = CriticWorker(_settings)
-    review = critic.review(topic, report_md)
+    try:
+        critic = CriticWorker(_settings)
+        review = critic.review(topic, report_md)
+    except Exception as e:
+        return f"[Error] Critic review failed: {str(e)[:200]}"
     return (
         f"**Critic Review**\n"
         f"- Score: {review.score:.2f} ({'needs revision' if review.needs_revision else 'acceptable'})\n"
@@ -58,6 +61,9 @@ def delegate_to_reviser(topic: str, report_md: str, suggestions: str, missing_to
         strengths=[],
     )
 
-    reviser = ReviserWorker(_settings)
-    revised = reviser.revise(topic, report_md, review)
+    try:
+        reviser = ReviserWorker(_settings)
+        revised = reviser.revise(topic, report_md, review)
+    except Exception as e:
+        return f"[Error] Revision failed: {str(e)[:200]}"
     return revised
