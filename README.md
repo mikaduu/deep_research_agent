@@ -61,31 +61,42 @@
 ### 环境要求
 
 - Python 3.11+
-- Conda (推荐) 或 pip
+- Conda 或 venv
 - OpenAI API 密钥 (或兼容的 API)
 
 ### 安装
 
-#### 方式 1: 使用 Conda (推荐)
+#### 方式 1: 使用 Conda
 
 ```bash
 # 克隆仓库
 git clone https://github.com/mikaduu/deepresearch_agent.git
 cd deepresearch_agent/deep_research_agent
 
-# 创建环境
-conda env create -f environment.yml
-conda activate deepresearch
+# 创建环境（按你的实际环境名）
+conda create -n hello_agent python=3.11 -y
+conda activate hello_agent
+
+# 安装依赖
+pip install -r requirements.txt
 ```
 
-#### 方式 2: 使用 pip
+#### 方式 2: 使用 venv / 系统 Python
 
 ```bash
 git clone https://github.com/mikaduu/deepresearch_agent.git
 cd deepresearch_agent/deep_research_agent
 
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+# macOS / Linux
+# source .venv/bin/activate
+
 pip install -r requirements.txt
 ```
+
+当前项目以 `requirements.txt` 作为依赖安装入口，不再要求 `environment.yml`。
 
 ### 配置
 
@@ -255,7 +266,7 @@ deep_research_agent/
 ├── workspace/                       # 运行时数据 (.gitignore 忽略)
 │   ├── memory/ notes/ reports/ pdf_cache/ vector_db/
 ├── main.py                          # CLI 入口
-├── requirements.txt / environment.yml
+├── requirements.txt
 └── docs/                            # 详细文档（不发布，本地查看）
     ├── ARCHITECTURE.md              # 完整架构说明
     ├── TOOLS.md                     # 工具抽象 + BaseAgent 详解
