@@ -8,6 +8,7 @@ Modes:
 """
 
 import base64
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
@@ -1056,12 +1057,14 @@ Return JSON:
         title = paper.title or ""
         if ":" in title:
             candidate = title.split(":")[0].strip()
-            if len(candidate) <= 30:
+            if 2 <= len(candidate) <= 40 and not self._looks_like_id(candidate):
                 return self._sanitize_filename(candidate)
         if analysis.get("contributions"):
             first = str(analysis["contributions"][0]).strip()
-            if first and len(first) <= 30:
+            if first and 2 <= len(first) <= 40 and not self._looks_like_id(first):
                 return self._sanitize_filename(first)
+        if title and not self._looks_like_id(title):
+            return self._sanitize_filename(title[:60])
         return paper.paper_id.replace("/", "_")
 
     @staticmethod
@@ -1070,9 +1073,20 @@ Return JSON:
             return "paper"
         if ":" in title:
             candidate = title.split(":")[0].strip()
-            if len(candidate) <= 30:
+            if 2 <= len(candidate) <= 40 and not PaperAnalyzer._looks_like_id(candidate):
                 return PaperAnalyzer._sanitize_filename(candidate)
-        return PaperAnalyzer._sanitize_filename(title[:30])
+        return PaperAnalyzer._sanitize_filename(title[:60])
+
+    @staticmethod
+    def _looks_like_id(text: str) -> bool:
+        normalized = (text or "").strip().lower().replace("arxiv:", "").replace(" ", "")
+        return bool(normalized) and (
+            normalized.startswith("http://arxiv.org/abs/")
+            or normalized.startswith("https://arxiv.org/abs/")
+            or normalized.startswith("http://arxiv.org/pdf/")
+            or normalized.startswith("https://arxiv.org/pdf/")
+            or re.fullmatch(r"\d{4}\.\d{4,5}(v\d+)?", normalized) is not None
+        )
 
     @staticmethod
     def _sanitize_filename(name: str) -> str:

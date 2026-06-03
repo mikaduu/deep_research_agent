@@ -83,7 +83,7 @@ class PaperFetcher:
         return self._build_fulltext_from_pdf(path.resolve(), paper_id=local_id)
 
     def infer_title_from_pdf(self, pdf_path: Union[str, Path]) -> str:
-        """优先从 PDF metadata 推断标题，失败时回退到文件名。"""
+        """优先从 PDF metadata 推断标题，不可靠时再尝试从首页正文提取。"""
         path = Path(pdf_path).expanduser()
         fallback = path.stem
         if not path.exists():
@@ -94,10 +94,71 @@ class PaperFetcher:
 
             with fitz.open(str(path)) as doc:
                 title = (doc.metadata or {}).get("title", "")
-            title = (title or "").strip()
-            return title or fallback
+                title = (title or "").strip()
+                if title and not self._looks_like_placeholder_title(title):
+                    return title
+
+                extracted = self._extract_title_from_first_page(doc)
+                if extracted and not self._looks_like_placeholder_title(extracted):
+                    return extracted
+            return fallback
         except Exception:
             return fallback
+
+    @staticmethod
+    def _looks_like_placeholder_title(title: str) -> bool:
+        clean = (title or "").strip()
+        if not clean:
+            return True
+
+        normalized = clean.lower().replace("arxiv:", "").replace(" ", "")
+        if re.fullmatch(r"\d{4}\.\d{4,5}(v\d+)?", normalized):
+            return True
+        if normalized in {"untitled", "unknown", "paper", "article"}:
+            return True
+        return False
+
+    @staticmethod
+    def _extract_title_from_first_page(doc) -> str:
+        if doc.page_count <= 0:
+            return ""
+
+        page = doc[0]
+        blocks = page.get_text("dict").get("blocks", [])
+        candidates: List[tuple] = []
+
+        for block in blocks:
+            if block.get("type") != 0:
+                continue
+            for line in block.get("lines", []):
+                text_parts = []
+                max_size = 0.0
+                for span in line.get("spans", []):
+                    text = (span.get("text") or "").strip()
+                    if not text:
+                        continue
+                    text_parts.append(text)
+                    max_size = max(max_size, float(span.get("size", 0.0) or 0.0))
+                if not text_parts:
+                    continue
+
+                text = " ".join(text_parts).strip()
+                if len(text) < 8 or len(text) > 220:
+                    continue
+                lower = text.lower()
+                if lower in {"abstract", "introduction", "references"}:
+                    continue
+                if lower.startswith("arxiv:"):
+                    continue
+                if re.fullmatch(r"[\d\W_]+", text):
+                    continue
+                candidates.append((max_size, text))
+
+        if not candidates:
+            return ""
+
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        return candidates[0][1]
 
     @staticmethod
     def _normalize_id(arxiv_id: str) -> str:
