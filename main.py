@@ -12,6 +12,7 @@ from rich.table import Table
 
 from src.agents.conversational_agent import ConversationalAgent
 from src.agents.manager import ResearchManager
+from src.agents.workspace_agent_command import register_workspace_agent_command
 from src.core.config import Settings
 from src.core.llm import LLMClient
 from src.gui_app import launch_gui
@@ -22,6 +23,7 @@ load_dotenv()
 
 app = typer.Typer()
 console = Console()
+register_workspace_agent_command(app, console, Path(__file__).parent)
 
 
 def get_orchestrator() -> ResearchOrchestrator:

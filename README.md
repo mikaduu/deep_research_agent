@@ -431,6 +431,10 @@ registry.register(my_tool)
 - ✅ **Step 1-6 全部完成** — 自主研究架构已就绪
   - Tool 抽象 + BaseAgent + 12 个工具
   - ResearchManager（主脑 autonomous agent）
+    - 支持把一个研究主题拆成多个专题线程并行调研
+    - 典型线程包括 baseline、相关方法线、局限性、benchmark / dataset
+    - 每个线程由独立 worker 搜索与总结，并返回置信度
+    - 低置信度线程结果会被自动过滤或降权
   - CriticWorker / ReviserWorker（autonomous workers）
   - web_search / web_fetch（突破学术信息墙）
 - 📋 **下一步** — LangGraph 对照版本 / GitHub 搜索 / Web UI

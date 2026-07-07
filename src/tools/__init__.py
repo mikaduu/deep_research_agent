@@ -9,6 +9,7 @@ from .memory_tools import (
     build_save_research_episode_tool,
 )
 from .delegation_tools import build_delegate_to_critic_tool, build_delegate_to_reviser_tool
+from .thread_tools import build_delegate_research_threads_tool
 from .web_tools import build_web_search_tool, build_web_fetch_tool
 
 __all__ = [
@@ -18,5 +19,6 @@ __all__ = [
     "build_retrieve_memory_tool", "build_save_note_tool",
     "build_save_research_episode_tool",
     "build_delegate_to_critic_tool", "build_delegate_to_reviser_tool",
+    "build_delegate_research_threads_tool",
     "build_web_search_tool", "build_web_fetch_tool",
 ]
