@@ -111,6 +111,7 @@ class WorkspaceAgent:
         self.messages: List[Dict[str, Any]] = [
             {"role": "system", "content": self._system_prompt()},
         ]
+        self.transcript_messages: List[Dict[str, Any]] = list(self.messages)
 
     def _system_prompt(self) -> str:
         mode = "project-write-enabled" if self.allow_write else "project-read-only"
@@ -154,12 +155,13 @@ class WorkspaceAgent:
         self.session_title = "new session"
         self.session_path = self._session_path(self.session_id)
         self.messages = [{"role": "system", "content": self._system_prompt()}]
+        self.transcript_messages = list(self.messages)
 
     def handle(self, user_input: str) -> WorkspaceTurnResult:
         start = time.time()
         if self.session_title == "new session":
             self.session_title = user_input[:80].strip() or "untitled session"
-        self.messages.append({"role": "user", "content": user_input})
+        self._append_message({"role": "user", "content": user_input})
         self._trim_history()
         self.save_session()
 
@@ -181,7 +183,7 @@ class WorkspaceAgent:
             tool_calls = getattr(msg, "tool_calls", None) or []
             if not tool_calls:
                 reply = (msg.content or "").strip()
-                self.messages.append({"role": "assistant", "content": reply})
+                self._append_message({"role": "assistant", "content": reply})
                 self._trim_history()
                 self.save_session()
                 return WorkspaceTurnResult(
@@ -207,7 +209,7 @@ class WorkspaceAgent:
                     for call in tool_calls
                 ],
             }
-            self.messages.append(assistant_msg)
+            self._append_message(assistant_msg)
 
             for call in tool_calls:
                 fn_name = call.function.name
@@ -226,7 +228,7 @@ class WorkspaceAgent:
                         "error": result.error,
                     }
                 )
-                self.messages.append(
+                self._append_message(
                     {
                         "role": "tool",
                         "tool_call_id": call.id,
@@ -241,7 +243,7 @@ class WorkspaceAgent:
             "这一轮已经达到工具调用步数上限。我已经保留了目前的观察结果，"
             "你可以继续追问，我会接着当前上下文往下做。"
         )
-        self.messages.append({"role": "assistant", "content": warning})
+        self._append_message({"role": "assistant", "content": warning})
         self.save_session()
         return WorkspaceTurnResult(
             reply=warning,
@@ -299,15 +301,21 @@ class WorkspaceAgent:
         self.session_id = data.get("session_id", selected["session_id"])
         self.session_title = data.get("title", selected.get("title", "untitled session"))
         self.session_path = self._session_path(self.session_id)
-        self.messages = [current_system] + restored
+        self.transcript_messages = [current_system] + restored
+        self.messages = list(self.transcript_messages)
         self._trim_history()
         self.save_session()
         return {
             "session_id": self.session_id,
             "title": self.session_title,
-            "message_count": len(self.messages),
+            "message_count": len(self.transcript_messages),
             "updated_at": data.get("updated_at", ""),
         }
+
+
+    def _append_message(self, message: Dict[str, Any]) -> None:
+        self.messages.append(message)
+        self.transcript_messages.append(message)
 
     def save_session(self) -> None:
         payload = {
@@ -317,7 +325,7 @@ class WorkspaceAgent:
             "allow_write": self.allow_write,
             "created_at": self.session_id[:15],
             "updated_at": datetime.utcnow().isoformat(timespec="seconds"),
-            "messages": self.messages,
+            "messages": self.transcript_messages,
         }
         self.session_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 

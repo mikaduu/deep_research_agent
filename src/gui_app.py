@@ -7,10 +7,19 @@ from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import parse_qs, urlparse
 
+from .agents.workspace_agent import WorkspaceAgent
 from .orchestrator import ResearchOrchestrator
 
 
 def build_gui_app(orchestrator: ResearchOrchestrator) -> ThreadingHTTPServer:
+    agent_lock = threading.Lock()
+    workspace_agent = WorkspaceAgent(
+        settings=orchestrator.settings,
+        project_root=orchestrator.settings.workspace_dir.parent,
+        allow_write=False,
+        max_tool_steps_per_turn=12,
+    )
+
     class GuiHandler(BaseHTTPRequestHandler):
         def _read_note_payload(self, note_path: str) -> Dict[str, Any]:
             file_path = Path(note_path).expanduser()
@@ -65,6 +74,21 @@ def build_gui_app(orchestrator: ResearchOrchestrator) -> ThreadingHTTPServer:
                     return
                 if path == "/api/stats":
                     self._send_json({"ok": True, "data": orchestrator.memory_stats()})
+                    return
+                if path == "/api/agent/status":
+                    self._send_json(
+                        {
+                            "ok": True,
+                            "data": {
+                                "session_id": workspace_agent.session_id,
+                                "title": workspace_agent.session_title,
+                                "message_count": len(workspace_agent.messages),
+                                "mode": "project-read-only",
+                                "sessions": workspace_agent.list_sessions(limit=8),
+                                "memory": workspace_agent.memory.stats(),
+                            },
+                        }
+                    )
                     return
                 if path == "/api/notes":
                     keyword = (query.get("q", [""])[0] or "").strip()
@@ -163,6 +187,48 @@ def build_gui_app(orchestrator: ResearchOrchestrator) -> ThreadingHTTPServer:
                 if path == "/api/open-note":
                     note_path = str(payload.get("path", "")).strip()
                     self._send_json({"ok": True, "data": self._read_note_payload(note_path)})
+                    return
+
+                if path == "/api/agent/message":
+                    message = str(payload.get("message", "")).strip()
+                    if not message:
+                        self._send_json({"ok": False, "error": "message is required"}, status=400)
+                        return
+                    with agent_lock:
+                        result = workspace_agent.handle(message)
+                        data = {
+                            "reply": result.reply,
+                            "tool_calls": result.tool_calls,
+                            "tokens_used": result.tokens_used,
+                            "elapsed_ms": result.elapsed_ms,
+                            "stopped_reason": result.stopped_reason,
+                            "session_id": workspace_agent.session_id,
+                            "title": workspace_agent.session_title,
+                            "message_count": len(workspace_agent.messages),
+                        }
+                    self._send_json({"ok": True, "data": data})
+                    return
+
+                if path == "/api/agent/resume":
+                    session_id = str(payload.get("session_id", "latest")).strip() or "latest"
+                    with agent_lock:
+                        info = workspace_agent.load_session(session_id)
+                    self._send_json({"ok": True, "data": info})
+                    return
+
+                if path == "/api/agent/clear":
+                    with agent_lock:
+                        workspace_agent.reset()
+                    self._send_json(
+                        {
+                            "ok": True,
+                            "data": {
+                                "session_id": workspace_agent.session_id,
+                                "title": workspace_agent.session_title,
+                                "message_count": len(workspace_agent.messages),
+                            },
+                        }
+                    )
                     return
 
                 self._send_json({"ok": False, "error": f"unknown path: {path}"}, status=404)
@@ -762,6 +828,105 @@ def _build_index_html() -> str:
         padding: 16px;
       }
     }
+
+
+    .agent-terminal {
+      display: grid;
+      gap: 12px;
+      min-height: 360px;
+      max-height: 620px;
+      overflow: auto;
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px solid rgba(15, 23, 42, 0.14);
+      background: #101418;
+      color: #e5e7eb;
+      font-family: var(--mono);
+    }
+
+    .agent-msg {
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      overflow-wrap: anywhere;
+    }
+
+    .agent-msg.user {
+      border-color: rgba(34, 197, 94, 0.25);
+      background: rgba(34, 197, 94, 0.08);
+    }
+
+    .agent-role {
+      margin-bottom: 8px;
+      color: #93c5fd;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .agent-reply {
+      white-space: pre-wrap;
+      line-height: 1.65;
+    }
+
+    .agent-trace details {
+      margin-top: 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      background: rgba(15, 23, 42, 0.68);
+      overflow: hidden;
+    }
+
+    .agent-trace summary {
+      cursor: pointer;
+      padding: 10px 12px;
+      color: #cbd5e1;
+    }
+
+    .trace-body {
+      margin: 0;
+      padding: 10px 12px 12px;
+      overflow: auto;
+      border-top: 1px solid rgba(148, 163, 184, 0.16);
+      color: #d1d5db;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+
+    .agent-session-bar {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .session-list {
+      display: grid;
+      gap: 8px;
+      max-height: 160px;
+      overflow: auto;
+      margin-top: 10px;
+    }
+
+    .session-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      border: 1px solid rgba(30, 28, 24, 0.10);
+      border-radius: 12px;
+      padding: 8px 10px;
+      background: rgba(255,255,255,0.58);
+      font-size: 12px;
+    }
+
   </style>
 </head>
 <body>
@@ -793,6 +958,29 @@ def _build_index_html() -> str:
 
     <section class="layout">
       <div class="stack">
+
+
+        <div class="card panel">
+          <h2>Workspace Agent</h2>
+          <div class="agent-session-bar">
+            <span id="agent-session-label">session: loading</span>
+            <span>project read-only · research writes enabled</span>
+          </div>
+          <div class="controls">
+            <div>
+              <label for="agent-input">给 agent 的任务</label>
+              <textarea id="agent-input" placeholder="例如：阅读这个项目，解释现在 tool calling 是否是真正 function calling；或：继续完成上一篇论文阅读报告"></textarea>
+            </div>
+            <div class="button-row">
+              <button class="btn-primary" id="btn-agent-send">发送</button>
+              <button class="btn-ghost" id="btn-agent-resume">恢复最新会话</button>
+              <button class="btn-ghost" id="btn-agent-clear">新会话</button>
+              <button class="btn-ghost" id="btn-agent-sessions">会话列表</button>
+            </div>
+            <div class="status" id="agent-status"></div>
+            <div class="session-list" id="agent-sessions"></div>
+          </div>
+        </div>
         <div class="card panel">
           <h2>论文工作台</h2>
           <div class="controls">
@@ -855,6 +1043,17 @@ def _build_index_html() -> str:
       </div>
 
       <div class="stack results">
+
+        <div class="card panel">
+          <h2>Agent 会话</h2>
+          <div class="agent-terminal" id="agent-log">
+            <div class="agent-msg">
+              <div class="agent-role">system</div>
+              <div class="agent-reply">常驻 agent 已就绪。工具调用默认折叠显示；展开每条 trace 可以查看工具名、参数预览和执行状态。</div>
+            </div>
+          </div>
+        </div>
+
         <div class="card panel">
           <h2>分析结果</h2>
           <div class="analysis-grid">
@@ -1380,6 +1579,119 @@ def _build_index_html() -> str:
       $("graph-stats").textContent = summarizeGraphStats(snapshot.stats || {}, nodes, edges);
     }
 
+
+    function renderAgentTrace(trace) {
+      if (!trace || !trace.length) {
+        return '<div class="mini" style="color:#94a3b8;margin-top:8px;">No tools called.</div>';
+      }
+      const items = trace.map((item, index) => {
+        const status = item.success ? "ok" : "error";
+        const args = JSON.stringify(item.args || {}, null, 2);
+        const error = item.error ? "\nerror: " + item.error : "";
+        const body = "tool: " + (item.tool || "") + "\nstatus: " + status + "\nargs:\n" + args + error;
+        return `
+          <details>
+            <summary>${index + 1}. ${escapeHtml(item.tool || "tool")} · ${escapeHtml(status)}</summary>
+            <pre class="trace-body">${escapeHtml(body)}</pre>
+          </details>
+        `;
+      }).join("");
+      return '<div class="agent-trace">' + items + '</div>';
+    }
+
+    function appendAgentMessage(role, content, trace = null, meta = "") {
+      const host = $("agent-log");
+      const klass = role === "user" ? "agent-msg user" : "agent-msg";
+      const metaHtml = meta ? `<div class="mini" style="color:#94a3b8;margin-top:8px;">${escapeHtml(meta)}</div>` : "";
+      const node = document.createElement("div");
+      node.className = klass;
+      node.innerHTML = `
+        <div class="agent-role">${escapeHtml(role)}</div>
+        <div class="agent-reply">${escapeHtml(content || "")}</div>
+        ${metaHtml}
+        ${trace ? renderAgentTrace(trace) : ""}
+      `;
+      host.appendChild(node);
+      host.scrollTop = host.scrollHeight;
+    }
+
+    function renderAgentSessions(sessions) {
+      const host = $("agent-sessions");
+      if (!sessions || !sessions.length) {
+        host.innerHTML = '<div class="mini">暂无已保存会话。</div>';
+        return;
+      }
+      host.innerHTML = sessions.map((item) => `
+        <div class="session-item">
+          <div>
+            <div><strong>${escapeHtml(item.session_id || "")}</strong></div>
+            <div class="mini">${escapeHtml((item.title || "untitled").slice(0, 72))}</div>
+          </div>
+          <button class="btn-ghost js-agent-resume-session" data-session-id="${escapeHtml(item.session_id || "")}">恢复</button>
+        </div>
+      `).join("");
+      host.querySelectorAll(".js-agent-resume-session").forEach((button) => {
+        button.addEventListener("click", () => resumeAgent(button.dataset.sessionId || "latest"));
+      });
+    }
+
+    async function refreshAgentStatus(showSessions = false) {
+      const data = await apiGet("/api/agent/status");
+      $("agent-session-label").textContent = "session: " + (data.session_id || "-") + " · " + (data.title || "new session");
+      if (showSessions) renderAgentSessions(data.sessions || []);
+      return data;
+    }
+
+    async function resumeAgent(sessionId = "latest") {
+      setStatus("agent-status", "正在恢复会话...");
+      try {
+        const data = await apiPost("/api/agent/resume", { session_id: sessionId });
+        appendAgentMessage("system", "已恢复会话 " + data.session_id + "\n标题: " + data.title + "\n消息数: " + data.message_count);
+        await refreshAgentStatus(true);
+        setStatus("agent-status", "会话已恢复。", "good");
+      } catch (err) {
+        setStatus("agent-status", String(err.message || err), "bad");
+      }
+    }
+
+    async function clearAgentSession() {
+      setStatus("agent-status", "正在开启新会话...");
+      try {
+        const data = await apiPost("/api/agent/clear", {});
+        $("agent-log").innerHTML = "";
+        appendAgentMessage("system", "已开启新会话 " + data.session_id);
+        await refreshAgentStatus(false);
+        setStatus("agent-status", "新会话已开启。", "good");
+      } catch (err) {
+        setStatus("agent-status", String(err.message || err), "bad");
+      }
+    }
+
+    async function sendAgentMessage() {
+      const input = $("agent-input");
+      const message = input.value.trim();
+      if (!message) {
+        setStatus("agent-status", "请输入任务。", "bad");
+        return;
+      }
+      appendAgentMessage("user", message);
+      input.value = "";
+      $("btn-agent-send").disabled = true;
+      setStatus("agent-status", "Agent 正在思考并调用工具...");
+      try {
+        const data = await apiPost("/api/agent/message", { message });
+        const meta = `${data.tokens_used || 0} tok · ${data.elapsed_ms || 0}ms · ${data.stopped_reason || "answered"}`;
+        appendAgentMessage("assistant", data.reply || "", data.tool_calls || [], meta);
+        await refreshAgentStatus(false);
+        setStatus("agent-status", "完成。", "good");
+      } catch (err) {
+        appendAgentMessage("system", String(err.message || err));
+        setStatus("agent-status", String(err.message || err), "bad");
+      } finally {
+        $("btn-agent-send").disabled = false;
+      }
+    }
+
     async function refreshStats() {
       const stats = await apiGet("/api/stats");
       $("metric-nodes").textContent = stats.paper_nodes ?? 0;
@@ -1527,6 +1839,16 @@ def _build_index_html() -> str:
 
     async function boot() {
       wireGraphInteractions();
+      $("btn-agent-send").addEventListener("click", sendAgentMessage);
+      $("agent-input").addEventListener("keydown", (event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+          event.preventDefault();
+          sendAgentMessage();
+        }
+      });
+      $("btn-agent-resume").addEventListener("click", () => resumeAgent("latest"));
+      $("btn-agent-clear").addEventListener("click", clearAgentSession);
+      $("btn-agent-sessions").addEventListener("click", () => refreshAgentStatus(true).catch((err) => setStatus("agent-status", err.message, "bad")));
       $("btn-search").addEventListener("click", runSearch);
       $("btn-analyze").addEventListener("click", runAnalyze);
       $("btn-load-notes").addEventListener("click", () => loadNotes($("notes-query").value.trim()).catch((err) => setStatus("action-status", err.message, "bad")));

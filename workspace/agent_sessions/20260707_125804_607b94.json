@@ -1,0 +1,95 @@
+{
+  "session_id": "20260707_125804_607b94",
+  "title": "请帮我阅读https://arxiv.org/pdf/2507.01961这篇论文，并保存笔记",
+  "project_root": "D:\\code\\hello agent\\chapter 14\\deep_research_agent",
+  "allow_write": false,
+  "created_at": "20260707_125804",
+  "updated_at": "2026-07-07T16:38:59",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are Deep Research Workspace Agent, a persistent tool-using agent inside the user's project.\n\nYou are closer to Claude Code than to a one-shot chatbot:\n- You keep conversation context across turns.\n- You inspect project files before making claims about the codebase.\n- You can call multiple tools in one user turn, observe results, then continue.\n- You can combine project context, long-term memory, paper search, web search, and paper reading.\n\nCore behavior:\n1. For project/code questions, use project_overview/search_project/read_project_file as needed.\n2. For research questions, first retrieve_memory, then search academic/web sources if needed.\n3. Be concrete. Cite project files and commands when relevant.\n4. Do not claim you changed files unless a write tool succeeded.\n5. If project file write tools are unavailable and the user asks to edit source files, explain that project editing is disabled and ask them to restart with --allow-write.\n6. Keep final answers concise and in Chinese unless the user asks otherwise.\n\nSafety and scope:\n- Project tools are scoped to the project root.\n- Research outputs are allowed: paper notes, reports, vector memory, episodic memory, skill memory, and paper graph memory may be written by research tools.\n- Prefer exact, small reads over loading huge files.\n- Do not invent tool results. If you have not inspected something, say so or inspect it.\n\n\nProject root: D:\\code\\hello agent\\chapter 14\\deep_research_agent\nProject filesystem mode: project-read-only\nResearch output mode: enabled (workspace notes/reports/memory may be written by research tools)\n"
+    },
+    {
+      "role": "user",
+      "content": "请帮我阅读https://arxiv.org/pdf/2507.01961这篇论文，并保存笔记"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_6UW4c65VNunDOEWyX6n0WiKU",
+          "type": "function",
+          "function": {
+            "name": "retrieve_memory",
+            "arguments": "{\"query\":\"arXiv 2507.01961 paper notes or prior research\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_6UW4c65VNunDOEWyX6n0WiKU",
+      "content": "### 历史研究情节\n\n**主题:** 我想做一个生成测试用例的智能体，主要创新点在具备一个结构化的规则提取(从需求文档，过往专家设计的案例，需求覆盖情况等公司内部文件提取)后，按照一定的形式讲规则组织起来，传给使用dpo微调过的大模型生成最终测试样例(dpo微调是为了筛除符合选出的规则但是不符合实际情况的结果)，请帮我判断可行性，以及现有研究情况以及是否存在benchmark (质量: 0.76)\n**洞见:** 该方向（结构化规则提取+DPO微调生成测试用例）具有创新性和可行性，但属于前沿探索，目前没有直接针对该方向的benchmark，现有研究几乎空白。主要挑战包括规则提取的自动化与准确性、DPO偏好数据集的构建成本以及模型在不同领域的泛化能力。\n\n### 语义记忆片段\n\n# Deep Research Agent 现状、代表基准与优化方向（2025阶段性综述）\\n\\n## 1. 主题定义\\nDeep Research Agent（DRA）通常指：能够围绕开放式研究问题，进行多步网页探索、定向检索、证据聚合、长文综合，并输出带引用报告的 LLM Agent。它处于传统 RAG 之上，更强调：\\n- 长时程任务分解\\n- 动态检索与回溯\\n- 证据级引用\\n- 报告结构化生成\\n- 在开放网络环境中的鲁棒性\\n\\n## 2. 现状判断\\n2025年的领域现状可概括为：\\n1. **产品化明显加速**：OpenAI Deep Research 等产品推动“面向最终用户的研究代理”成为主流应用形态。\\n2. **评测体系刚开始成形**：2025年出现多个直接面向 deep research / web research agent 的 benchmark。\\n3.\n\n## 已确认的核心论文\n\n1. **DPO 原始论文**: Rafailov et al. (2023) \"Direct Preference Optimization: Your Language Model is Secretly a Reward Model\" - arXiv:2305.18290\n2. **RLTF**: Liu et al. (2023) \"RLTF: Reinforcement Learning from Unit Test Feedback\" - arXiv:2307.04349 - 在线RL框架利用单元测试反馈改进代码生成\n3. **OAIF**: Guo et al. (2024) \"Direct Language Model Alignment from Online AI Feedback\" - arXiv:2402.04792 - 在线AI反馈替代离\n\n# Latent action in embodied intelligence\n\n## Core concept\nLatent action 指不用真实低层动作标签（如关节速度、末端位姿增量、离散控制指令）直接监督，而是从观测序列中学习一个隐变量，去表示“导致状态从 o_t 变到 o_{t+1} 的可控因素”。在具身智能里，它常被用来连接 observation-only demonstrations / internet videos 与实际机器人控制。\n\n## Why it matters\n- 机器人动作标注昂贵，而视频/观测数据丰富。\n- 真实动作空间跨平台不统一，latent action 可作为更抽象的中间层。\n- 它能兼做 world model / policy learning / imitation learning 的接口。\n\n## Main method famil\n\nUnified Video Action Model\n该论文提出统一视频-动作模型 UVA，在共享潜在表示中联合建模视频与动作、在解码时分离两者，从而同时支持策略学习、视频生成与动力学建模，并通过跳过视频解码实现快速动作预测。\n\nContributions:\n- 提出统一视频-动作模型 UVA：在共享潜在表示中联合建模视频与动作，并分离解码，重要性在于同时服务策略学习与生成式世界建模\n- 引入基于任务输入输出结构的掩码训练范式：同一模型可在 policy、video generation、forward dynamics、inverse dynamics、policy+planner 等多功能间切换，重要性在于统一监督形式并提升训练灵活性\n- 证明模型可利用无动作视频数据进行预训练与联合训练：先在 Human Video 上做视频生成预训练，再在 Human Video + LIBERO-"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_mzzByUiuvFXTyDky1rxiqcxB",
+          "type": "function",
+          "function": {
+            "name": "analyze_paper",
+            "arguments": "{\"arxiv_id\":\"2507.01961\",\"focus\":\"overall paper understanding and concise Chinese notes\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_mzzByUiuvFXTyDky1rxiqcxB",
+      "content": "{'tldr': 'AC-DiT 提出一种面向移动操作的端到端扩散 Transformer，通过显式建模移动底座到机械臂的条件关系，并按任务阶段自适应融合 2D/3D 感知，从而提升仿真与真实场景中的整体操作成功率。', 'problem': '论文解决的是语言条件下家庭移动操作中的联合控制问题：机器人需要在长时程任务中同时协调移动底座与机械臂，并在不同阶段利用合适的视觉模态完成接近、定位、抓取、转移与放置等动作。', 'prior_limitations': '现有方法主要存在两类不足。第一，缺少对移动底座运动如何影响机械臂/全身控制的显式建模，在高自由度、长时程执行中容易产生并累积误差。第二，往往在整个移动操作过程中固定使用同一种视觉观测策略，或对多模态信息进行静态融合，没有考虑不同任务阶段对 2D 语义信息与 3D 几何信息需求的变化。此外，引言还指出，无论是依赖 VLM/LLM 规划器的两阶段方案，还是基于模仿学习/强化学习的端到端方法，都尚未充分解决移动底座与机械臂之间的有效协调问题。', 'motivation': '作者认为，移动底座不是独立于机械臂的外部变量，而是直接决定后续操作几何条件的重要因素，因此应将底座运动表示作为预测全身动作的条件先验注入模型。同时，移动操作不同阶段对感知信息的依赖显著不同：语义理解阶段更需要 2D 图像，精确交互阶段更依赖 3D 空间结构，因此采用按阶段自适应的多模态加权，比固定模态或静态融合更符合任务本质。', 'contributions': ['提出 AC-DiT 端到端移动操作框架 - 将扩散 Transformer 扩展到移动底座与机械臂联合控制，面向真实家庭任务场景', '提出 Mobility-to-Body Conditioning - 将底座运动表征作为全身动作预测的上下文先验，显式增强移动与操作的协同', '提出 Perception-Aware Multimodal Adaptation - 对 2D 图像与 3D 点云进行按阶段自适应加权，以匹配不同操作阶段的感知需求', '通过仿真与真实机器人广泛实验验证有效性 - 消融结果显示完整模型平均成功率达到 49.0%，相对仅 2D 基线提升 9.0 个点'], 'method_summary': 'AC-DiT 是一个面向移动操作的端到端扩散 Transformer 框架，目标是在自然语言条件下联合预测移动底座与机械臂的全身动作。其设计围绕两个核心问题展开：一是如何建模移动底座对后续操作动作的影响，二是如何让感知系统随着任务阶段变化而调整对不同模态的依赖。\\n\\n在控制建模上，AC-DiT 首先从移动底座轨迹或运动状态中提取 mobility representations，再将这些表示作为上下文条件注入动作生成过程，用于指导 whole-body action prediction。这样，模型在生成机械臂或全身动作时，不再把底座视作独立控制通道，而是显式考虑“底座当前位置与运动趋势会如何改变可达性、抓取位姿与交互前提”。这一机制对应 Mobility-to-Body Conditioning。\\n\\n在感知建模上，AC-DiT 同时接收 2D 图像与 3D 点云等多模态输入，但并不对它们采用固定权重融合。相反，模型根据当前任务阶段、执行状态和传感器可见性，自适应调整各模态的重要性，形成更符合当前需求的视觉特征。这一机制对应 Perception-Aware Multimodal Adaptation。例如在需要语义识别时可以更多依赖 2D 图像，在需要空间对齐和精确操作时则提高 3D 点云权重。\\n\\n实验上，作者通过逐步消融表明：从仅 2D 输入到 2D+3D，再加入 MBC 与 PMA，成功率持续提升，说明显式协调建模和感知自适应都对移动操作有效。额外可视化也显示，不同相机与点云权重会随时间步动态变化，支持该方法的设计动机。', 'modules': [{'name': 'Mobility-to-Body Conditioning', 'motivation': '移动底座运动会直接影响机械臂的可达性、交互姿态和后续操作前提，若不显式建模，误差容易在长时程执行中累积。', 'design': '先提取底座运动表征，再将其作为上下文先验注入扩散 Transformer 的全身动作预测过程，用条件方式引导模型联合生成更协调的底座与机械臂动作。'}, {'name': 'Perception-Aware Multimodal Adaptation', 'motivation': '移动操作不同阶段对感知信息需求不同，固定依赖单一模态或静态融合 2D/3D 信息无法充分利用各自优势。', 'design': '对 2D 图像与 3D 点云等多模态输入分配自适应重要性权重，动态融合视觉特征，使模型在语义驱动阶段更关注 2D，在精确几何交互阶段更关注 3D。'}, {'name': '扩散式全身动作生成', 'motivation': '移动操作需要在高维动作空间中建模复杂时序依赖与多部件协同，传统直接回归难以稳定表达这种联合分布。', 'design': '以 DiT 为骨干，在语言条件、视觉条件以及协调条件共同作用下生成 whole-body actions，实现移动底座与机械臂的端到端联合控制。'}], 'formulas': [], 'datasets': [], 'implementation': {'backbone': 'DiT（扩散 Transformer）', 'optimizer': '文中未提供', 'lr': '文中未提供', 'batch_size': '文中未提供', 'epochs': '文中未提供', 'hardware': '文中未提供'}, 'results': '论文在仿真和真实世界移动操作任务中进行了广泛实验，并报告 AC-DiT 优于现有方法。给出的关键定量结果来自方法消融：仅使用 2D 视觉输入时平均成功率为 37.5%；加入 2D+3D 多模态输入后提升到 44.8%；在此基础上加入 Mobility-to-Body Conditioning 后达到 47.0%；进一步加入 Perception-Aware Multimodal Adaptation 的完整模型达到最佳 49.0%。此外，作者在可视化分析中展示了模型会在 3 个时间步上动态调整不同传感器的重要性，支持其感知自适应设计。', 'ablations': '关键消融结论非常清晰。Exp1 仅 2D 输入，平均成功率 37.5%。Exp2 加入 2D+3D，多模态融合后提升到 44.8%，比 Exp1 提高 7.3 个点，说明多模态感知有效。Exp3 在 Exp2 基础上加入 MBC，成功率达到 47.0%，再提升 2.2 个点，说明显式建模移动底座到身体的条件关系能够改善协调。Exp4 使用完整模型 MBC+PMA，成功率达到 49.0%，比 Exp3 再提升 2.0 个点，相对 Exp1 总提升 9.0 个点，说明按任务阶段自适应调整模态权重进一步增强了复杂长时程任务表现。', 'figures_interpretation': [{'index': 5, 'what_it_shows': '主文中的可视化展示 Perception-Aware Multimodal Adaptation 在任务执行过程中的模态权重变化。', 'why_it_matters': '它直观支持论文核心主张：模型并非固定依赖某一种视觉输入，而是根据当前任务需求动态重分配 2D/3D 感知重要性。'}, {'index': 12, 'what_it_shows': '展示完整 episode 中 3 个时间步的观测与各传感器重要性权重。left-wrist camera 权重基本不变；right-wrist camera 与 point cloud 在 time steps 1 和 3 显著升高；point cloud 在 step 2 显著下降；exterior camera 始终较高。', 'why_it_matters': '该图说明权重变化具有明确任务语义：静态持物臂对应稳定权重，关键操作阶段右腕视角和点云更重要，而全局外部相机持续提供上下文。它为 PMA 的有效性提供了可解释证据。'}], 'strengths': ['问题定义准确，直接针对移动操作中最核心的底座-机械臂协调难题，而不是只提升单一操作器性能。', '方法设计有明确因果动机：MBC 显式建模底座运动对全身动作的影响，契合真实机器人中的可达性与位姿前提。', '消融证据完整且增益连续：37.5% → 44.8% → 47.0% → 49.0%，说明多模态融合、协调条件建模与感知自适应各自都有独立贡献。', '可解释性较好，Figure 12 展示了不同时间步下各模态权重的语义化变化，而非黑箱式提升。', '同时覆盖仿真与真实世界实验，增强了方法有效性的可信度。'], 'weaknesses': ['论文结论中明确承认方法基于模仿学习，因此性能依赖数据量与数据质量，并可能继承示范中的次优或偏置行为。', '讨论部分指出真实机器人仍存在三类明显失败：双臂协同错误、底座速度控制带来的累积运动误差、以及停止位姿不佳导致后续操作前提不满足。', '底盘由速度控制器驱动，若模型输出过高或过低速度，可能进入不可恢复状态或几乎不移动，说明对低层运动控制鲁棒性仍有限。', '当前提供信息中缺少训练细节、数据规模、优化器、学习率等关键实现参数，复现门槛仍偏高。', '双臂精细配合场景仍不稳定，例如手递手转移和向碗中精确投放等任务，说明高精度操作能力还有提升空间。'], 'reproducibility': {'code': False, 'weights': False, 'details_sufficient': False, 'data_public': False}, 'related_work': ['两阶段移动操作方法（文中引为 [1, 2, 3, 4, 5]） - 依赖 VLM 或 LLM 进行长时程任务分解，再调用原子技能执行；AC-DiT 相比之下采取端到端联合控制。', '端到端移动操作方法（文中引为 [6, 7, 8, 9, 10]） - 基于模仿学习或强化学习联合优化底座与机械臂控制；AC-DiT 的区别在于显式引入底座到身体的条件建模与按阶段自适应多模态感知。', 'DiT 相关工作（文中提及 [51, 11]） - 为 AC-DiT 提供扩散 Transformer 骨干；本文是在移动操作场景中对其进行协调控制扩展。'], 'future_work': '作者没有在所给片段中展开详细未来工作路线，但从讨论与结论可推断，后续方向包括：提升双臂协作精度，降低速度控制导致的底座累积误差，改进 locomotion 到 manipulation 的衔接稳定性，并缓解模仿学习对数据质量、数据规模及演示偏差的依赖。', 'tags': ['移动操作', '扩散Transformer', '多模态感知', '机器人控制', '模仿学习'], 'relevance_score': 0.94, '_source': 'fulltext', '_num_pages': 20, '_num_chunks': 6, '_num_figures': 16, '_section_summaries': [{'section': 'abstract', 'summary': '# AC-DiT 摘要关键信息提取\\n\\n## 论文背景与问题\\n- 研究对象：面向家庭任务的、语言条件驱动的 mobile manipulation（移动操作）机器人控制。\\n- 现有方法的两个核心局限：\\n  1. **缺乏对移动底座对机械臂控制影响的显式建模**  \\n     - 在高自\n...[truncated, total 13817 chars]"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_xNJ12cuBrg3as5Zi9lJiflSc",
+          "type": "function",
+          "function": {
+            "name": "save_note",
+            "arguments": "{\"doc_id\":\"paper:arxiv-2507.01961\",\"title\":\"论文笔记：AC-DiT (arXiv:2507.01961)\",\"body\":\"# AC-DiT 论文笔记（arXiv:2507.01961）\\n\\n## 一句话总结\\nAC-DiT 提出一种面向移动操作（mobile manipulation）的端到端扩散 Transformer，通过显式建模“移动底座→全身动作”的条件关系，并按任务阶段自适应融合 2D/3D 感知，提升了仿真与真实场景中的操作成功率。\\n\\n## 研究问题\\n论文关注语言条件下的家庭移动操作任务：机器人需要同时协调移动底座与机械臂，在长时程任务中完成接近、抓取、转移、放置等动作。\\n\\n## 现有方法不足\\n1. 缺少对底座运动如何影响机械臂/全身控制的显式建模。\\n2. 通常固定使用某一种视觉模态，或对 2D/3D 信息做静态融合，未考虑不同任务阶段的感知需求变化。\\n\\n## 核心方法\\n### 1) Mobility-to-Body Conditioning (MBC)\\n将移动底座的运动表征作为上下文条件，注入全身动作预测过程，使模型在生成机械臂/全身动作时显式考虑底座位置与运动趋势。\\n\\n### 2) Perception-Aware Multimodal Adaptation (PMA)\\n对 2D 图像与 3D 点云进行按阶段自适应加权：\\n- 语义理解阶段更依赖 2D 图像\\n- 精确交互阶段更依赖 3D 几何信息\\n\\n### 3) 扩散式全身动作生成\\n使用 DiT（Diffusion Transformer）作为骨干，在语言、视觉和协调条件共同作用下生成 whole-body actions。\\n\\n## 结果\\n论文给出的关键消融结果：\\n- 仅 2D：37.5%\\n- 2D + 3D：44.8%\\n- + MBC：47.0%\\n- + PMA（完整模型）：49.0%\\n\\n相对仅 2D 基线，总提升 9.0 个点。\\n\\n## 主要优点\\n- 问题定义准确，聚焦底座-机械臂协同这一核心难点。\\n- 方法动机明确，MBC 和 PMA 都有较强任务合理性。\\n- 消融实验清晰，增益连续且可解释。\\n- 有模态权重可视化，说明模型会随任务阶段动态调整感知依赖。\\n\\n## 局限性\\n- 基于模仿学习，性能依赖数据量与数据质量。\\n- 真实机器人中仍存在双臂协同错误、底座速度误差累积、停止位姿不佳等失败模式。\\n- 当前公开信息里训练细节与复现细节仍不充分。\\n\\n## 我的判断\\n这篇论文的价值主要在于：\\n1. 不再把底座和机械臂当作彼此独立的控制通道，而是显式建模它们的条件依赖；\\n2. 把“任务阶段感知需求变化”引入多模态融合设计中，而不是做静态拼接。\\n\\n如果你在做移动操作、全身控制、模仿学习机器人或扩散式策略学习，这篇很值得读。\\n\\n## 标签\\n- mobile manipulation\\n- diffusion transformer\\n- multimodal perception\\n- robotics imitation learning\\n- whole-body control\\n\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_xNJ12cuBrg3as5Zi9lJiflSc",
+      "content": "{'saved': 'paper:arxiv-2507.01961'}"
+    },
+    {
+      "role": "assistant",
+      "content": "已帮你阅读并保存笔记。\n\n- 论文：`arXiv:2507.01961`\n- 已保存笔记ID：`paper:arxiv-2507.01961`\n\n简要结论：\n- 这篇论文提出 **AC-DiT**，面向 **mobile manipulation**。\n- 核心创新有两个：\n  1. **Mobility-to-Body Conditioning (MBC)**：显式建模“底座运动如何影响全身/机械臂动作”。\n  2. **Perception-Aware Multimodal Adaptation (PMA)**：根据任务阶段动态调整 2D 图像与 3D 点云的重要性。\n- 关键消融结果：\n  - 仅 2D：**37.5%**\n  - 2D+3D：**44.8%**\n  - +MBC：**47.0%**\n  - +PMA（完整模型）：**49.0%**\n\n我的判断：\n- 论文最有价值的点，不只是“用扩散模型做控制”，而是把 **底座-机械臂协同** 和 **阶段感知自适应** 两个机器人移动操作里的真实难点单独拿出来建模。\n- 局限也很明显：仍然依赖模仿学习数据，真实世界下还有双臂协同误差、底座速度累积误差等问题。\n\n如果你愿意，我接下来可以继续帮你做其中一种：\n1. **输出更完整的中文精读版笔记**\n2. **提炼成汇报PPT式摘要**\n3. **和相关论文做对比**（如 RT 系列、Diffusion Policy、移动操作端到端方法）\n4. **分析这篇论文对你当前项目的可借鉴点**"
+    },
+    {
+      "role": "user",
+      "content": "我刚刚让你做了什么"
+    },
+    {
+      "role": "assistant",
+      "content": "你刚刚让我：\n\n1. **阅读论文**：`https://arxiv.org/pdf/2507.01961`\n2. **保存笔记**\n\n我实际做了：\n- 先检查了是否已有相关历史记忆\n- 调用了论文分析工具阅读 `arXiv:2507.01961`\n- 将笔记保存为：`paper:arxiv-2507.01961`\n\n如果你想，我也可以把刚保存的笔记完整贴给你。"
+    },
+    {
+      "role": "user",
+      "content": "你之前还做了什么"
+    },
+    {
+      "role": "assistant",
+      "content": "在你这次“阅读并保存论文笔记”之前，这个会话里我还做过两件事：\n\n1. **查询长期记忆**\n   - 检查是否已经有 `arXiv:2507.01961` 的相关研究记录或笔记。\n   - 结果：没有直接命中的现成论文笔记，但检索到了几条相关/不完全相关的历史研究内容。\n\n2. **分析并保存论文笔记**\n   - 使用论文分析工具阅读了 `2507.01961`\n   - 把整理后的中文笔记保存成：\n     - `paper:arxiv-2507.01961`\n\n如果你问的是“在更早的其他对话里我做过什么”，我只能基于当前可见会话和可检索记忆回答；当前这轮里，主要就是这两步。"
+    }
+  ]
+}
